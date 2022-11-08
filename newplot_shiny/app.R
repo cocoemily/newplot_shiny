@@ -9,6 +9,10 @@
 
 library(shiny)
 library(tidyverse)
+library(ggrepel)
+library(rjson)
+
+theme_set(theme_bw())
 
 #data = read_csv("~/Desktop/NYU/Kazakhstan/EDM/edm_practice/PRACTICE_points_2022_09_04.csv")
 
@@ -18,7 +22,8 @@ ui <- fluidPage(
   # Application title
   titlePanel("newplot"),
   
-  fluidRow(fileInput("input_data", "Upload EDM CSV file", width = "100%")), 
+  fluidRow(fileInput("input_data", "Upload EDM JSON or CSV file", width = "100%", 
+                     accept = c(".json", ".csv"))), 
   
   # Sidebar with a slider input for number of bins 
   sidebarLayout( position = "right",
@@ -32,10 +37,6 @@ ui <- fluidPage(
                  # Show a plot of the generated distribution
                  mainPanel(
                    tabsetPanel( id = "plots",
-                                ##for testing
-                                # tabPanel("Table view", 
-                                #          dataTableOutput("printDF")
-                                # ),
                                 tabPanel("Front view",
                                          h3("FRONT VIEW"),
                                          plotOutput("frontView", 
@@ -50,6 +51,10 @@ ui <- fluidPage(
                                          h3("PLAN VIEW"),
                                          plotOutput("planView", 
                                                     click = "plot_click")
+                                ), 
+                                ##for testing
+                                tabPanel("Table view",
+                                         dataTableOutput("printDF")
                                 )
                    )
                  )
@@ -66,54 +71,81 @@ server <- function(input, output, session) {
     req(input$input_data)
     inFile = input$input_data
     
-    df = read_csv(inFile$datapath)
-    #print(df)
-    return(df)
+    ext = tools::file_ext(inFile$datapath)
+    
+    if(ext == "csv") {
+      df = read_csv(inFile$datapath)
+      return(list(df, NULL, NULL, NULL))
+    }
+    
+    if(ext == "json") {
+      jdata = fromJSON(file = inFile$datapath)
+      #print(names(jdata))
+    
+      dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
+      data = as.data.frame(do.call(rbind, jdata[[dataname]]))
+      data[c(1:4, 6:8)] = sapply(data[c(1:4, 6:8)], as.numeric)
+      
+      
+      prisms = as.data.frame(do.call(rbind, jdata$prisms))
+      prisms[c(2:3)] = sapply(prisms[c(2:3)], as.numeric)
+      units = as.data.frame(do.call(rbind, jdata$units))
+      units[c(2:5)] = sapply(units[c(2:5)], as.numeric)
+      datums = as.data.frame(do.call(rbind, jdata$datums))
+      datums[c(2:4)] = sapply(datums[c(2:4)], as.numeric)
+      
+      return(list(data, units, prisms, datums))
+      
+    }
+  
     
   })
   
   #for testing
-  # output$printDF <- renderDataTable(
-  #   dataInput()
-  # )
+  output$printDF <- renderDataTable({
+    datalist = dataInput()
+    data = datalist[[1]]
+  }
+  )
   
   output$frontView <- renderPlot({
-    data = dataInput()
+    datalist = dataInput()
+    data = datalist[[1]]
     
     #draw front view
     ggplot(data, aes(x = X, y = Z, label = ID)) +
       geom_point() +
-      geom_label_repel(size = 2) +
-      title("Front view")
+      geom_label_repel(size = 2)
   })
   
   output$sideView <- renderPlot({
-    data = dataInput()
+    datalist = dataInput()
+    data = datalist[[1]]
     
     #draw side view
     ggplot(data, aes(x = Y, y = Z, label = ID)) +
       geom_point() +
-      geom_label_repel(size = 2) + 
-      title("Side view")
+      geom_label_repel(size = 2)
   })
   
   output$planView <- renderPlot({
-    data = dataInput()
+    datalist = dataInput()
+    data = datalist[[1]]
     
     #draw plan view
     ggplot(data, aes(x = X, y = Y, label = ID)) +
       geom_point() +
-      geom_label_repel(size = 2) + 
-      title("Plan view")
+      geom_label_repel(size = 2)
   })
   
   output$info = renderTable(striped = T, bordered = T, width = "100%", {
-    
-    df = dataInput() %>%
+    datalist = dataInput()
+    data = datalist[[1]]
+    df = data %>%
       select(UNIT, ID, X, Y, Z, PRISM, LEVEL, CODE, EXCAVATOR)
     df = as.data.frame(df)
     
-    nearPoints(df, input$plot_click, threshold = 10, maxpoints = 1, addDist = T)
+    nearPoints(df, input$plot_click, threshold = 10, maxpoints = 5, addDist = T)
   })
 }
 
