@@ -41,9 +41,20 @@ ui <- fluidPage(
   navbarPage( "newplot", 
               tabPanel("Plots", 
                        sidebarLayout(position = "right",
-                                     
-                                     #actionButton("find", label = "Find record"),
-                                     actionButton("edit", label = "Edit record"),
+                                     sidebarPanel(
+                                       fluidRow( 
+                                         wellPanel(
+                                           fluidRow(textInput("find_unit", "UNIT"), 
+                                                    textInput("find_id","ID")), 
+                                           actionButton("find", label = "Find record")
+                                         )
+                                       ),
+                                       fluidRow( 
+                                         wellPanel(
+                                           actionButton("edit", label = "Edit record")
+                                         )
+                                       )
+                                     ),
                                      
                                      # numericInput("x", label = "New x value", value = NULL),
                                      # numericInput("y", label = "New y value", value = NULL),
@@ -60,7 +71,7 @@ ui <- fluidPage(
                                                                         brush = brushOpts(
                                                                           id = "front_brush",
                                                                           resetOnNew = TRUE
-                                                                        )), 
+                                                                        )) 
                                                     ), 
                                                     tabPanel("Side view",
                                                              h3("SIDE VIEW"),
@@ -81,10 +92,10 @@ ui <- fluidPage(
                                                                           id = "plan_brush",
                                                                           resetOnNew = TRUE
                                                                         ))
-                                                    ), 
+                                                    ) 
                                                     
                                        )
-                                     ),
+                                     )
                        ),
                        
                        fluidRow(tableOutput("info"))
@@ -105,8 +116,8 @@ ui <- fluidPage(
                          ), 
                          tabPanel("Prisms", 
                                   dataTableOutput("prisms")
-                         ), 
-              ), 
+                         ) 
+              )
   )
   
 )
@@ -156,12 +167,13 @@ server <- function(input, output, session) {
   output$printDF <- renderDT({
     datalist = dataInput() 
     data = datalist[[1]]
-    },
-    editable = TRUE, 
-    rownames = FALSE, 
-    selection = "none"
+  },
+  editable = TRUE, 
+  rownames = FALSE, 
+  selection = "none"
   )
   
+  ##TODO EDITTING
   observeEvent(input$printDF_cell_edit, {
     info = input$printDF_cell_edit
     str(info)
@@ -181,6 +193,7 @@ server <- function(input, output, session) {
     #draw front view
     ggplot(data, aes(x = X, y = Z, label = ID)) +
       geom_point() +
+      geom_point(data = special_point$data, color = "red", size = 3) +
       geom_label_repel(size = 2) +
       coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
   })
@@ -192,6 +205,7 @@ server <- function(input, output, session) {
     #draw side view
     ggplot(data, aes(x = Y, y = Z, label = ID)) +
       geom_point() +
+      geom_point(data = special_point$data, color = "red", size = 3) +
       geom_label_repel(size = 2) +
       coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
   })
@@ -203,6 +217,7 @@ server <- function(input, output, session) {
     #draw plan view
     ggplot(data, aes(x = X, y = Y, label = ID)) +
       geom_point() +
+      geom_point(data = special_point$data, color = "red", size = 3) +
       geom_label_repel(size = 2) +
       coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
   })
@@ -235,7 +250,7 @@ server <- function(input, output, session) {
   }
   )
   
-  
+  ##TODO EDITTING
   observeEvent(input$edit,  {
     datalist = dataInput()
     data = datalist[[1]]
@@ -261,6 +276,17 @@ server <- function(input, output, session) {
       footer = NULL, 
       size = "l"
     ))
+  })
+  
+  ##WHY DO ALL POINTS START READ
+  special_point <- reactiveValues(data = NULL)
+  observeEvent(input$find, {
+    datalist = dataInput()
+    data = datalist[[1]]
+    
+    special_point$data = data %>% filter(UNIT == input$find_unit & ID == input$find_id)
+    #print(special_point$data)
+    
   })
   
   front_ranges <- reactiveValues(x = NULL, y = NULL)
