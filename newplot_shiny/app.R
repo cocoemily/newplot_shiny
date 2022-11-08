@@ -12,85 +12,109 @@ if(!require(tidyverse)){install.packages("tidyverse")}
 if(!require(ggrepel)){install.packages("ggrepel")}
 if(!require(rjson)){install.packages("rjson")}
 if(!require(DT)){install.packages("DT")}
+if(!require(shinythemes)){install.packages("shinythemes")}
 
 library(shiny)
 library(tidyverse)
 library(ggrepel)
 library(rjson)
 library(DT)
+library(shinythemes)
 
-theme_set(theme_minimal())
+
+theme_set(theme_bw())
 
 #data = read_csv("~/Desktop/NYU/Kazakhstan/EDM/edm_practice/PRACTICE_points_2022_09_04.csv")
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
   
+  #shinythemes::themeSelector(),
+  theme = shinythemes::shinytheme("cosmo"),
+  
   # Application title
-  titlePanel("newplot"),
+  #titlePanel("newplot"),
   
   fluidRow(fileInput("input_data", "Upload EDM JSON or CSV file", width = "100%", 
                      accept = c(".json", ".csv"))), 
   
-  sidebarLayout( position = "right",
-                 
-                 actionButton("edit", label = "Edit points")
-                 
-                 # numericInput("x", label = "New x value", value = NULL),
-                 # numericInput("y", label = "New y value", value = NULL),
-                 # numericInput("z", label = "New z value", value = NULL)
-  ),
-  
-  # Show a plot of the generated distribution
-  mainPanel(
-    tabsetPanel( id = "plots",
-                 tabPanel("Front view",
-                          h3("FRONT VIEW"),
-                          plotOutput("frontView", 
-                                     click = "plot_click",
-                                     dblclick = "front_dblclick", 
-                                     brush = brushOpts(
-                                       id = "front_brush",
-                                       resetOnNew = TRUE
-                                     )), 
-                 ), 
-                 tabPanel("Side view",
-                          h3("SIDE VIEW"),
-                          plotOutput("sideView", 
-                                     click = "plot_click",
-                                     dblclick = "side_dblclick",
-                                     brush = brushOpts(
-                                       id = "side_brush",
-                                       resetOnNew = TRUE
-                                     )), 
-                          plotOutput("zoom_side", 
-                                     click = "plot_click")
-                 ), 
-                 tabPanel("Plan view",
-                          h3("PLAN VIEW"),
-                          plotOutput("planView", 
-                                     click = "plot_click",
-                                     dblclick = "plan_dblclick",
-                                     brush = brushOpts(
-                                       id = "plan_brush",
-                                       resetOnNew = TRUE
-                                     )), 
-                          plotOutput("zoom_plan", 
-                                     click = "plot_click")
-                 ), 
-                 ##for testing
-                 tabPanel("Table view",
-                          DTOutput("printDF")
-                 )
-    )
-  ),
-  
-  fluidRow(tableOutput("info"))
+  navbarPage( "newplot", 
+              tabPanel("Plots", 
+                       sidebarLayout(position = "right",
+                                     
+                                     #actionButton("find", label = "Find record"),
+                                     actionButton("edit", label = "Edit record"),
+                                     
+                                     # numericInput("x", label = "New x value", value = NULL),
+                                     # numericInput("y", label = "New y value", value = NULL),
+                                     # numericInput("z", label = "New z value", value = NULL)
+                                     
+                                     # Show a plot of the generated distribution
+                                     mainPanel(
+                                       tabsetPanel( id = "plots",
+                                                    tabPanel("Front view",
+                                                             h3("FRONT VIEW"),
+                                                             plotOutput("frontView", 
+                                                                        click = "plot_click",
+                                                                        dblclick = "front_dblclick", 
+                                                                        brush = brushOpts(
+                                                                          id = "front_brush",
+                                                                          resetOnNew = TRUE
+                                                                        )), 
+                                                    ), 
+                                                    tabPanel("Side view",
+                                                             h3("SIDE VIEW"),
+                                                             plotOutput("sideView", 
+                                                                        click = "plot_click",
+                                                                        dblclick = "side_dblclick",
+                                                                        brush = brushOpts(
+                                                                          id = "side_brush",
+                                                                          resetOnNew = TRUE
+                                                                        ))
+                                                    ), 
+                                                    tabPanel("Plan view",
+                                                             h3("PLAN VIEW"),
+                                                             plotOutput("planView", 
+                                                                        click = "plot_click",
+                                                                        dblclick = "plan_dblclick",
+                                                                        brush = brushOpts(
+                                                                          id = "plan_brush",
+                                                                          resetOnNew = TRUE
+                                                                        ))
+                                                    ), 
+                                                    
+                                       )
+                                     ),
+                       ),
+                       
+                       fluidRow(tableOutput("info"))
+              ), 
+              tabPanel("Data table", 
+                       ##for testing
+                       tabPanel("Table view",
+                                DTOutput("printDF", 
+                                         width = "auto")
+                       )
+              ), 
+              navbarMenu("More", 
+                         tabPanel("Units", 
+                                  dataTableOutput("units")
+                         ),
+                         tabPanel("Datums", 
+                                  dataTableOutput("datums")
+                         ), 
+                         tabPanel("Prisms", 
+                                  dataTableOutput("prisms")
+                         ), 
+              ), 
+  )
   
 )
 
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
+  
+  rv = reactiveValues(data = NULL, orig = NULL)
   
   dataInput = reactive({
     req(input$input_data)
@@ -100,6 +124,8 @@ server <- function(input, output, session) {
     
     if(ext == "csv") {
       df = read_csv(inFile$datapath)
+      rv$data = df
+      rv$orig = df
       return(list(df, NULL, NULL, NULL))
     }
     
@@ -110,7 +136,8 @@ server <- function(input, output, session) {
       dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
       data = as.data.frame(do.call(rbind, jdata[[dataname]]))
       data[c(1:4, 6:8)] = sapply(data[c(1:4, 6:8)], as.numeric)
-      
+      rv$data = df
+      rv$orig = df
       
       prisms = as.data.frame(do.call(rbind, jdata$prisms))
       prisms[c(2:3)] = sapply(prisms[c(2:3)], as.numeric)
@@ -126,15 +153,29 @@ server <- function(input, output, session) {
     
   })
   
-  #for testing
   output$printDF <- renderDT({
-    datalist = dataInput()
+    datalist = dataInput() 
     data = datalist[[1]]
-  }
+    },
+    editable = TRUE, 
+    rownames = FALSE, 
+    selection = "none"
   )
   
+  observeEvent(input$printDF_cell_edit, {
+    info = input$printDF_cell_edit
+    str(info)
+    i = info$row
+    j = info$col + 1
+    
+    
+    
+    ##something to mark the changes
+  })
+  
+  
   output$frontView <- renderPlot({
-    datalist = dataInput()
+    datalist = dataInput() 
     data = datalist[[1]]
     
     #draw front view
@@ -145,7 +186,7 @@ server <- function(input, output, session) {
   })
   
   output$sideView <- renderPlot({
-    datalist = dataInput()
+    datalist = dataInput() 
     data = datalist[[1]]
     
     #draw side view
@@ -156,7 +197,7 @@ server <- function(input, output, session) {
   })
   
   output$planView <- renderPlot({
-    datalist = dataInput()
+    datalist = dataInput() 
     data = datalist[[1]]
     
     #draw plan view
@@ -176,12 +217,49 @@ server <- function(input, output, session) {
     nearPoints(df, input$plot_click, threshold = 10, maxpoints = 5, addDist = T)
   })
   
+  output$units = renderDT({
+    datalist = dataInput()
+    data = datalist[[2]]
+  }
+  )
+  
+  output$prisms = renderDT({
+    datalist = dataInput()
+    data = datalist[[3]]
+  }
+  )
+  
+  output$datums = renderDT({
+    datalist = dataInput()
+    data = datalist[[4]]
+  }
+  )
+  
+  
   observeEvent(input$edit,  {
+    datalist = dataInput()
+    data = datalist[[1]]
+    df = data %>%
+      select(UNIT, ID, X, Y, Z, PRISM, LEVEL, CODE, EXCAVATOR)
+    df = as.data.frame(df)
+    
+    point = nearPoints(df, input$plot_click, threshold = 10, maxpoints = 1, addDist = F)
+    
     showModal(modalDialog(
-      title = "Somewhat important message",
-      "This is a somewhat important message.",
+      title = "Edit",
+      textInput("unit_input", label = "UNIT", value = point$UNIT), 
+      textInput("id_input", label = "ID", value = point$ID), 
+      numericInput("x_input", label = "X", value = point$X),
+      numericInput("y_input", label = "Y", value = point$Y), 
+      numericInput("z_input", label = "Z", value = point$Z), 
+      numericInput("prism_input", label = "PRISM", value = point$PRISM), 
+      textInput("level_input", label = "LEVEL", value = point$LEVEL),
+      textInput("code_input", label = "CODE", value = point$CODE),
+      textInput("excav_input", label = "EXCAVATOR", value = point$EXCAVATOR),
+      actionButton("submit_edits", label = "Submit changes"),
       easyClose = TRUE,
-      footer = NULL
+      footer = NULL, 
+      size = "l"
     ))
   })
   
