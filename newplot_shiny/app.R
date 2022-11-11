@@ -35,8 +35,12 @@ ui <- fluidPage(
   # Application title
   #titlePanel("newplot"),
   
-  fluidRow(fileInput("input_data", "Upload EDM JSON or CSV file", width = "100%", 
-                     accept = c(".json", ".csv"))), 
+  # fluidRow(fileInput("input_cfg", "Upload EDM CFG file", width = "100%",
+  #                    accept = c(".cfg"))),
+  
+  fluidRow(fileInput("input_data", "Upload EDM JSON or CSV file", width = "100%",
+                     accept = c(".json", ".csv"))),
+
   
   navbarPage( "newplot", 
               tabPanel("Plots", 
@@ -104,7 +108,8 @@ ui <- fluidPage(
                        ##for testing
                        tabPanel("Table view",
                                 DTOutput("printDF", 
-                                         width = "auto")
+                                         width = "auto"), 
+                                column(width = 12, downloadButton("download", class = "btn-block"))
                        )
               ), 
               navbarMenu("More", 
@@ -125,7 +130,29 @@ ui <- fluidPage(
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
   
-  rv = reactiveValues(data = NULL, orig = NULL)
+  jsondata = reactiveVal()
+  
+  data.df = reactiveVal()
+  orig.df = reactiveVal()
+  
+  prisms.df = reactiveVal()
+  units.df = reactiveVal()
+  datums.df = reactiveVal()
+  
+  
+  # cfgInput = reactive( {
+  #   req(input$input_cfg)
+  #   inFile = input$input_cfg
+  #   ext = tools::file_ext(inFile$datapath)
+  #   
+  #   file = read_tsv(inFile$datapath)
+  #   
+  #   data.df(file)
+  #   print(data.df)
+  #   
+  #   return(file)
+  #   
+  # })
   
   dataInput = reactive({
     req(input$input_data)
@@ -135,27 +162,30 @@ server <- function(input, output, session) {
     
     if(ext == "csv") {
       df = read_csv(inFile$datapath)
-      rv$data = df
-      rv$orig = df
+      data.df(df)
+      orig.df(df)
       return(list(df, NULL, NULL, NULL))
     }
     
     if(ext == "json") {
       jdata = fromJSON(file = inFile$datapath)
-      #print(names(jdata))
+      jsondata(jdata)
       
       dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
       data = as.data.frame(do.call(rbind, jdata[[dataname]]))
       data[c(1:4, 6:8)] = sapply(data[c(1:4, 6:8)], as.numeric)
-      rv$data = df
-      rv$orig = df
+      data.df(data)
+      orig.df(data)
       
       prisms = as.data.frame(do.call(rbind, jdata$prisms))
       prisms[c(2:3)] = sapply(prisms[c(2:3)], as.numeric)
+      prisms.df(prisms)
       units = as.data.frame(do.call(rbind, jdata$units))
       units[c(2:5)] = sapply(units[c(2:5)], as.numeric)
+      units.df(units)
       datums = as.data.frame(do.call(rbind, jdata$datums))
       datums[c(2:4)] = sapply(datums[c(2:4)], as.numeric)
+      datums.df(datums)
       
       return(list(data, units, prisms, datums))
       
@@ -165,8 +195,12 @@ server <- function(input, output, session) {
   })
   
   output$printDF <- renderDT({
-    datalist = dataInput() 
-    data = datalist[[1]]
+    if(is.null(data.df())) {
+      datalist = dataInput()
+      data = datalist[[1]]
+    } else {
+      data = data.df()
+    }
   },
   editable = TRUE, 
   rownames = FALSE, 
@@ -180,27 +214,85 @@ server <- function(input, output, session) {
     i = info$row
     j = info$col + 1
     
+    newdf = data.df()
+    newdf[i,j] = info$value
+    data.df(newdf)
     
+    jdata = jsondata()
+    sp.df = split(data.df(), row(data.df()))
+    dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
+    print(jdata[[dataname]])
+    jdata[[dataname]] <- sp.df
+    jsondata(jdata)
+    write(toJSON(jdata), "test.json")
     
-    ##something to mark the changes
+    ##something to mark the changes?
   })
   
   
+  output$download = downloadHandler(
+    filename = function() {
+      paste0(tools::file_path_sans_ext((input$input_data$name)), Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      #TODO deal with this
+      vroom::vroom_write(data.df(), file)
+    }
+  )
+  
+  front_ranges <- reactiveValues(x = NULL, y = NULL)
   output$frontView <- renderPlot({
-    datalist = dataInput() 
-    data = datalist[[1]]
+    # datalist = dataInput() 
+    # data = datalist[[1]]
+    data = data.df()
     
-    #draw front view
-    ggplot(data, aes(x = X, y = Z, label = ID)) +
-      geom_point() +
-      geom_point(data = special_point$data, color = "red", size = 3) +
-      geom_label_repel(size = 2) +
-      coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+    if(is.null(front_ranges$x)) {
+      front_ranges$x <- c(min(data$X) - 100, max(data$X) + 100)
+    }
+    
+    if(is.null(front_ranges$y)) {
+      front_ranges$y <- c(min(data$Z) - 100, max(data$Z) + 100)
+    }
+    
+    if(!is.null(special_point$data)) {
+      ggplot(data, aes(x = X, y = Z, label = ID)) +
+        geom_point() +
+        geom_point(data = special_point$data, color = "red", size = 3) +
+        geom_label_repel(size = 2) +
+        coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+    } else {
+      ggplot(data, aes(x = X, y = Z, label = ID)) +
+        geom_point() +
+        geom_label_repel(size = 2) +
+        coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+    }
   })
   
+  observeEvent(input$front_dblclick, {
+    brush = input$front_brush
+    if (!is.null(brush)) {
+      front_ranges$x <- c(brush$xmin, brush$xmax)
+      front_ranges$y <- c(brush$ymin, brush$ymax)
+      
+    } else {
+      front_ranges$x <- NULL
+      front_ranges$y <- NULL
+    }
+  })
+  
+  side_ranges <- reactiveValues(x = NULL, y = NULL)
   output$sideView <- renderPlot({
-    datalist = dataInput() 
-    data = datalist[[1]]
+    # datalist = dataInput() 
+    # data = datalist[[1]]
+    data = data.df()
+    
+    if(is.null(side_ranges$x)) {
+      side_ranges$x <- c(min(data$Y) - 100, max(data$Y) + 100)
+    }
+    
+    if(is.null(side_ranges$y)) {
+      side_ranges$y <- c(min(data$Z) - 100, max(data$Z) + 100)
+    }
     
     #draw side view
     ggplot(data, aes(x = Y, y = Z, label = ID)) +
@@ -210,9 +302,31 @@ server <- function(input, output, session) {
       coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
   })
   
+  observeEvent(input$side_dblclick, {
+    brush = input$side_brush
+    if (!is.null(brush)) {
+      side_ranges$x <- c(brush$xmin, brush$xmax)
+      side_ranges$y <- c(brush$ymin, brush$ymax)
+      
+    } else {
+      side_ranges$x <- NULL
+      side_ranges$y <- NULL
+    }
+  })
+  
+  plan_ranges <- reactiveValues(x = NULL, y = NULL)
   output$planView <- renderPlot({
-    datalist = dataInput() 
-    data = datalist[[1]]
+    # datalist = dataInput() 
+    # data = datalist[[1]]
+    data = data.df()
+    
+    if(is.null(plan_ranges$x)) {
+      plan_ranges$x <- c(min(data$X) - 100, max(data$X) + 100)
+    }
+    
+    if(is.null(plan_ranges$y)) {
+      plan_ranges$y <- c(min(data$Y) - 100, max(data$Y) + 100)
+    }
     
     #draw plan view
     ggplot(data, aes(x = X, y = Y, label = ID)) +
@@ -222,9 +336,28 @@ server <- function(input, output, session) {
       coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
   })
   
+  observeEvent(input$plan_dblclick, {
+    brush = input$plan_brush
+    if (!is.null(brush)) {
+      plan_ranges$x <- c(brush$xmin, brush$xmax)
+      plan_ranges$y <- c(brush$ymin, brush$ymax)
+      
+    } else {
+      plan_ranges$x <- NULL
+      plan_ranges$y <- NULL
+    }
+  })
+  
   output$info = renderTable(striped = T, bordered = T, width = "100%", {
-    datalist = dataInput()
-    data = datalist[[1]]
+    # datalist = dataInput() 
+    # data = datalist[[1]]
+    if(is.null(data.df())) {
+      datalist = dataInput()
+      data = datalist[[1]]
+    } else {
+      data = data.df()
+    }
+    
     df = data %>%
       select(UNIT, ID, X, Y, Z, PRISM, LEVEL, CODE, EXCAVATOR)
     df = as.data.frame(df)
@@ -232,38 +365,80 @@ server <- function(input, output, session) {
     nearPoints(df, input$plot_click, threshold = 10, maxpoints = 5, addDist = T)
   })
   
-  output$units = renderDT({
-    datalist = dataInput()
-    data = datalist[[2]]
-  }
-  )
+  output$units = renderDT({ units.df() },  editable = TRUE, rownames = FALSE, selection = "none")
+  observeEvent(input$units_cell_edit, {
+    info = input$units_cell_edit
+    i = info$row
+    j = info$col + 1
+    
+    newdf = units.df()
+    newdf[i,j] = info$value
+    units.df(newdf)
+    
+    jdata = jsondata()
+    sp.df = split(units.df(), row(units.df()))
+    jdata$units <- sp.df
+    jsondata(jdata)
+    write(toJSON(jdata), "test.json")
+    
+  })
   
-  output$prisms = renderDT({
-    datalist = dataInput()
-    data = datalist[[3]]
-  }
-  )
+  output$prisms = renderDT({ prisms.df() }, editable = TRUE, rownames = FALSE, selection = "none")
+  observeEvent(input$prisms_cell_edit, {
+    info = input$prisms_cell_edit
+    i = info$row
+    j = info$col + 1
+    
+    newdf = prisms.df()
+    newdf[i,j] = info$value
+    prisms.df(newdf)
+    
+    jdata = jsondata()
+    sp.df = split(prisms.df(), row(prisms.df()))
+    jdata$prisms <- sp.df
+    jsondata(jdata)
+    write(toJSON(jdata), "test.json")
+    
+  })
   
-  output$datums = renderDT({
-    datalist = dataInput()
-    data = datalist[[4]]
-  }
-  )
+  output$datums = renderDT({ datums.df()}, editable = TRUE, rownames = FALSE, selection = "none")
+  observeEvent(input$datums_cell_edit, {
+    info = input$datums_cell_edit
+    i = info$row
+    j = info$col + 1
+    
+    newdf = datums.df()
+    newdf[i,j] = info$value
+    datums.df(newdf)
+    
+    jdata = jsondata()
+    sp.df = split(datums.df(), row(datums.df()))
+    jdata$datums <- sp.df
+    jsondata(jdata)
+    write(toJSON(jdata), "test.json")
+    
+  })
   
-  ##TODO EDITTING
+  orig_unit = reactiveVal()
+  orig_id = reactiveVal()
   observeEvent(input$edit,  {
-    datalist = dataInput()
-    data = datalist[[1]]
+    # datalist = dataInput() 
+    # data = datalist[[1]]
+    data = data.df()
+    
     df = data %>%
       select(UNIT, ID, X, Y, Z, PRISM, LEVEL, CODE, EXCAVATOR)
     df = as.data.frame(df)
     
     point = nearPoints(df, input$plot_click, threshold = 10, maxpoints = 1, addDist = F)
-    
+    orig_unit(point$UNIT)
+    orig_id(point$ID)
+        
     showModal(modalDialog(
       title = "Edit",
-      textInput("unit_input", label = "UNIT", value = point$UNIT), 
-      textInput("id_input", label = "ID", value = point$ID), 
+      textInput("row_input", label = "row", value = rownames(point)),
+      textInput("unit_input", label = "UNIT", value = point$UNIT),
+      textInput("id_input", label = "ID", value = point$ID),
       numericInput("x_input", label = "X", value = point$X),
       numericInput("y_input", label = "Y", value = point$Y), 
       numericInput("z_input", label = "Z", value = point$Z), 
@@ -278,55 +453,46 @@ server <- function(input, output, session) {
     ))
   })
   
-  ##WHY DO ALL POINTS START READ
+  observeEvent(input$submit_edits, {
+    #removeModal()
+    
+    data = data.df()
+    orig = orig.df()
+    datarow = orig[which(orig$UNIT[[1]] == orig_unit()[[1]] & orig$ID[[1]] == orig_id())[[1]],]
+    print(datarow)
+    datarow$UNIT = input$unit_input
+    datarow$ID = input$id_input
+    datarow$X = input$x_input
+    datarow$Y = input$y_input
+    datarow$Z = input$z_input
+    datarow$PRISM = input$prism_input
+    datarow$LEVEL = input$level_input
+    datarow$CODE = input$code_input
+    datarow$EXCAVATOR = input$excav_input
+    print(datarow)
+  
+    data[input$row_input,] <- datarow
+    print(data)
+    data.df(data)
+    
+    jdata = jsondata()
+    sp.df = split(data.df(), row(data.df()))
+    dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
+    print(jdata[[dataname]])
+    jdata[[dataname]] <- sp.df
+    jsondata(jdata)
+  })
+  
   special_point <- reactiveValues(data = NULL)
   observeEvent(input$find, {
-    datalist = dataInput()
-    data = datalist[[1]]
+    # datalist = dataInput() 
+    # data = datalist[[1]]
+    data = data.df()
     
     special_point$data = data %>% filter(UNIT == input$find_unit & ID == input$find_id)
-    #print(special_point$data)
-    
+    print(special_point$data)
   })
   
-  front_ranges <- reactiveValues(x = NULL, y = NULL)
-  observeEvent(input$front_dblclick, {
-    brush = input$front_brush
-    if (!is.null(brush)) {
-      front_ranges$x <- c(brush$xmin, brush$xmax)
-      front_ranges$y <- c(brush$ymin, brush$ymax)
-      
-    } else {
-      front_ranges$x <- NULL
-      front_ranges$y <- NULL
-    }
-  })
-  
-  side_ranges <- reactiveValues(x = NULL, y = NULL)
-  observeEvent(input$side_dblclick, {
-    brush = input$side_brush
-    if (!is.null(brush)) {
-      side_ranges$x <- c(brush$xmin, brush$xmax)
-      side_ranges$y <- c(brush$ymin, brush$ymax)
-      
-    } else {
-      side_ranges$x <- NULL
-      side_ranges$y <- NULL
-    }
-  })
-  
-  plan_ranges <- reactiveValues(x = NULL, y = NULL)
-  observeEvent(input$plan_dblclick, {
-    brush = input$plan_brush
-    if (!is.null(brush)) {
-      plan_ranges$x <- c(brush$xmin, brush$xmax)
-      plan_ranges$y <- c(brush$ymin, brush$ymax)
-      
-    } else {
-      plan_ranges$x <- NULL
-      plan_ranges$y <- NULL
-    }
-  })
 }
 
 # Run the application 
