@@ -13,6 +13,7 @@ if(!require(ggrepel)){install.packages("ggrepel")}
 if(!require(rjson)){install.packages("rjson")}
 if(!require(DT)){install.packages("DT")}
 if(!require(shinythemes)){install.packages("shinythemes")}
+if(!require(gtools)){install.packages("gtools")}
 
 library(shiny)
 library(tidyverse)
@@ -20,6 +21,7 @@ library(ggrepel)
 library(rjson)
 library(DT)
 library(shinythemes)
+library(gtools)
 
 
 theme_set(theme_bw())
@@ -179,7 +181,11 @@ server <- function(input, output, session) {
       jsondata(jdata)
       
       dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
-      data = as.data.frame(do.call(rbind, jdata[[dataname]]))
+      dflist = list()
+      for(i in 1:length(jdata[[dataname]])) {
+        dflist[[i]] = as.data.frame(jdata[[dataname]][[i]])
+      }
+      data = as.data.frame(do.call(smartbind, dflist))
       data[c(1:4, 6:8)] = sapply(data[c(1:4, 6:8)], as.numeric)
       data.df(data)
       orig.df(data)
@@ -279,30 +285,26 @@ server <- function(input, output, session) {
     
     if(!is.null(special_point$data)) {
       if(input$select_view == 2) {
-        ggplot(data, aes(x = X, y = Z, label = ID , group = grp)) +
+        ggplot(data, aes(x = X, y = Z, group = grp)) +
           geom_point() +
           geom_line() +
           geom_point(data = special_point$data, color = "red", size = 3) +
-          geom_label_repel(size = 2) +
           coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
       } else {
-        ggplot(data, aes(x = X, y = Z, label = ID)) +
+        ggplot(data, aes(x = X, y = Z)) +
           geom_point() +
           geom_point(data = special_point$data, color = "red", size = 3) +
-          geom_label_repel(size = 2) +
           coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
       }
     }else {
       if(input$select_view == 2) {
-        ggplot(data, aes(x = X, y = Z, label = ID, group = grp)) +
+        ggplot(data, aes(x = X, y = Z, group = grp)) +
           geom_point() +
           geom_line() +
-          geom_label_repel(size = 2) +
           coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
       } else {
-        ggplot(data, aes(x = X, y = Z, label = ID)) +
+        ggplot(data, aes(x = X, y = Z)) +
           geom_point() +
-          geom_label_repel(size = 2) +
           coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
       }
     }
@@ -345,30 +347,26 @@ server <- function(input, output, session) {
     #draw side view
     if(!is.null(special_point$data)) {
       if(input$select_view == 2) {
-        ggplot(data, aes(x = Y, y = Z, label = ID , group = grp)) +
+        ggplot(data, aes(x = Y, y = Z, group = grp)) +
           geom_point() +
           geom_line() +
           geom_point(data = special_point$data, color = "red", size = 3) +
-          geom_label_repel(size = 2) +
           coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
       } else {
-        ggplot(data, aes(x = Y, y = Z, label = ID)) +
+        ggplot(data, aes(x = Y, y = Z)) +
           geom_point() +
           geom_point(data = special_point$data, color = "red", size = 3) +
-          geom_label_repel(size = 2) +
           coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
       }
     }else {
       if(input$select_view == 2) {
-        ggplot(data, aes(x = Y, y = Z, label = ID, group = grp)) +
+        ggplot(data, aes(x = Y, y = Z, group = grp)) +
           geom_point() +
           geom_line() +
-          geom_label_repel(size = 2) +
           coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
       } else {
-        ggplot(data, aes(x = Y, y = Z, label = ID)) +
+        ggplot(data, aes(x = Y, y = Z)) +
           geom_point() +
-          geom_label_repel(size = 2) +
           coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
       }
     }
@@ -411,30 +409,26 @@ server <- function(input, output, session) {
     #draw plan view
     if(!is.null(special_point$data)) {
       if(input$select_view == 2) {
-        ggplot(data, aes(x = X, y = Y, label = ID , group = grp)) +
+        ggplot(data, aes(x = X, y = Y, group = grp)) +
           geom_point() +
           geom_line() +
           geom_point(data = special_point$data, color = "red", size = 3) +
-          geom_label_repel(size = 2) +
           coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
       } else {
-        ggplot(data, aes(x = X, y = Y, label = ID)) +
+        ggplot(data, aes(x = X, y = Y)) +
           geom_point() +
           geom_point(data = special_point$data, color = "red", size = 3) +
-          geom_label_repel(size = 2) +
           coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
       }
     }else {
       if(input$select_view == 2) {
-        ggplot(data, aes(x = X, y = Y, label = ID, group = grp)) +
+        ggplot(data, aes(x = X, y = Y, group = grp)) +
           geom_point() +
           geom_line() +
-          geom_label_repel(size = 2) +
           coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
       } else {
-        ggplot(data, aes(x = X, y = Y, label = ID)) +
+        ggplot(data, aes(x = X, y = Y)) +
           geom_point() +
-          geom_label_repel(size = 2) +
           coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
       }
     }
