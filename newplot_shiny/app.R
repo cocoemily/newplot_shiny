@@ -207,7 +207,6 @@ server <- function(input, output, session) {
   selection = "none"
   )
   
-  ##TODO EDITTING
   observeEvent(input$printDF_cell_edit, {
     info = input$printDF_cell_edit
     str(info)
@@ -225,8 +224,6 @@ server <- function(input, output, session) {
     jdata[[dataname]] <- sp.df
     jsondata(jdata)
     write(toJSON(jdata), "test.json")
-    
-    ##something to mark the changes?
   })
   
   
@@ -436,7 +433,7 @@ server <- function(input, output, session) {
         
     showModal(modalDialog(
       title = "Edit",
-      textInput("row_input", label = "row", value = rownames(point)),
+      conditionalPanel("false", textInput("row_input", label = "row", value = rownames(point))),
       textInput("unit_input", label = "UNIT", value = point$UNIT),
       textInput("id_input", label = "ID", value = point$ID),
       numericInput("x_input", label = "X", value = point$X),
@@ -454,7 +451,7 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$submit_edits, {
-    #removeModal()
+    removeModal()
     
     data = data.df()
     orig = orig.df()
@@ -472,15 +469,17 @@ server <- function(input, output, session) {
     print(datarow)
   
     data[input$row_input,] <- datarow
-    print(data)
+    #print(data)
     data.df(data)
     
     jdata = jsondata()
     sp.df = split(data.df(), row(data.df()))
     dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
-    print(jdata[[dataname]])
+    #print(jdata[[dataname]])
     jdata[[dataname]] <- sp.df
     jsondata(jdata)
+    write(toJSON(jdata), "test.json")
+    
   })
   
   special_point <- reactiveValues(data = NULL)
