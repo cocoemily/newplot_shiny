@@ -146,9 +146,9 @@ server <- function(input, output, session) {
   
   prisms.df = reactiveVal()
   units.df = reactiveVal()
-  datums.df = reactiveVal()
+  datums.df = reactiveVal
   
-  
+  ##TODO figure this out
   # cfgInput = reactive( {
   #   req(input$input_cfg)
   #   inFile = input$input_cfg
@@ -260,7 +260,6 @@ server <- function(input, output, session) {
     #print(special_point$data)
   })
   
-  
   front_ranges <- reactiveValues(x = NULL, y = NULL)
   output$frontView <- renderPlot({
     # datalist = dataInput() 
@@ -351,23 +350,23 @@ server <- function(input, output, session) {
           geom_point() +
           geom_line() +
           geom_point(data = special_point$data, color = "red", size = 3) +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+          coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
       } else {
         ggplot(data, aes(x = Y, y = Z)) +
           geom_point() +
           geom_point(data = special_point$data, color = "red", size = 3) +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+          coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
       }
     }else {
       if(input$select_view == 2) {
         ggplot(data, aes(x = Y, y = Z, group = grp)) +
           geom_point() +
           geom_line() +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+          coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
       } else {
         ggplot(data, aes(x = Y, y = Z)) +
           geom_point() +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+          coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
       }
     }
   })
@@ -413,23 +412,23 @@ server <- function(input, output, session) {
           geom_point() +
           geom_line() +
           geom_point(data = special_point$data, color = "red", size = 3) +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+          coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
       } else {
         ggplot(data, aes(x = X, y = Y)) +
           geom_point() +
           geom_point(data = special_point$data, color = "red", size = 3) +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+          coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
       }
     }else {
       if(input$select_view == 2) {
         ggplot(data, aes(x = X, y = Y, group = grp)) +
           geom_point() +
           geom_line() +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+          coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
       } else {
         ggplot(data, aes(x = X, y = Y)) +
           geom_point() +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+          coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
       }
     }
   })
