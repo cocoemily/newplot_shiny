@@ -40,9 +40,18 @@ ui <- fluidPage(
   
   fluidRow(fileInput("input_data", "Upload EDM JSON or CSV file", width = "100%",
                      accept = c(".json", ".csv"))),
-
+  
   
   navbarPage( "newplot", 
+              tabPanel("Data table", 
+                       ##for testing
+                       tabPanel("Table view",
+                                DTOutput("printDF", 
+                                         width = "auto"), 
+                                #column(width = 12, downloadButton("download", class = "btn-block"))
+                       )
+              ),
+              
               tabPanel("Plots", 
                        sidebarLayout(position = "right",
                                      sidebarPanel(
@@ -104,14 +113,7 @@ ui <- fluidPage(
                        
                        fluidRow(tableOutput("info"))
               ), 
-              tabPanel("Data table", 
-                       ##for testing
-                       tabPanel("Table view",
-                                DTOutput("printDF", 
-                                         width = "auto"), 
-                                column(width = 12, downloadButton("download", class = "btn-block"))
-                       )
-              ), 
+               
               navbarMenu("More", 
                          tabPanel("Units", 
                                   dataTableOutput("units")
@@ -220,7 +222,7 @@ server <- function(input, output, session) {
     jdata = jsondata()
     sp.df = split(data.df(), row(data.df()))
     dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
-    print(jdata[[dataname]])
+    #print(jdata[[dataname]])
     jdata[[dataname]] <- sp.df
     jsondata(jdata)
     write(toJSON(jdata), "test.json")
@@ -236,6 +238,17 @@ server <- function(input, output, session) {
       vroom::vroom_write(data.df(), file)
     }
   )
+  
+  special_point <- reactiveValues(data = NULL)
+  observeEvent(input$find, {
+    # datalist = dataInput() 
+    # data = datalist[[1]]
+    data = data.df()
+    
+    special_point$data = data %>% filter(UNIT == input$find_unit & ID == input$find_id)
+    #print(special_point$data)
+  })
+  
   
   front_ranges <- reactiveValues(x = NULL, y = NULL)
   output$frontView <- renderPlot({
@@ -292,11 +305,18 @@ server <- function(input, output, session) {
     }
     
     #draw side view
-    ggplot(data, aes(x = Y, y = Z, label = ID)) +
-      geom_point() +
-      geom_point(data = special_point$data, color = "red", size = 3) +
-      geom_label_repel(size = 2) +
-      coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
+    if(!is.null(special_point$data)) {
+      ggplot(data, aes(x = Y, y = Z, label = ID)) +
+        geom_point() +
+        geom_point(data = special_point$data, color = "red", size = 3) +
+        geom_label_repel(size = 2) +
+        coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
+    } else {
+      ggplot(data, aes(x = Y, y = Z, label = ID)) +
+        geom_point() +
+        geom_label_repel(size = 2) +
+        coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
+    }
   })
   
   observeEvent(input$side_dblclick, {
@@ -326,11 +346,18 @@ server <- function(input, output, session) {
     }
     
     #draw plan view
-    ggplot(data, aes(x = X, y = Y, label = ID)) +
-      geom_point() +
-      geom_point(data = special_point$data, color = "red", size = 3) +
-      geom_label_repel(size = 2) +
-      coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
+    if(!is.null(special_point$data)) {
+      ggplot(data, aes(x = X, y = Y, label = ID)) +
+        geom_point() +
+        geom_point(data = special_point$data, color = "red", size = 3) +
+        geom_label_repel(size = 2) +
+        coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
+    } else {
+      ggplot(data, aes(x = X, y = Y, label = ID)) +
+        geom_point() +
+        geom_label_repel(size = 2) +
+        coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
+    }
   })
   
   observeEvent(input$plan_dblclick, {
@@ -430,7 +457,7 @@ server <- function(input, output, session) {
     point = nearPoints(df, input$plot_click, threshold = 10, maxpoints = 1, addDist = F)
     orig_unit(point$UNIT)
     orig_id(point$ID)
-        
+    
     showModal(modalDialog(
       title = "Edit",
       conditionalPanel("false", textInput("row_input", label = "row", value = rownames(point))),
@@ -467,7 +494,7 @@ server <- function(input, output, session) {
     datarow$CODE = input$code_input
     datarow$EXCAVATOR = input$excav_input
     print(datarow)
-  
+    
     data[input$row_input,] <- datarow
     #print(data)
     data.df(data)
@@ -480,16 +507,6 @@ server <- function(input, output, session) {
     jsondata(jdata)
     write(toJSON(jdata), "test.json")
     
-  })
-  
-  special_point <- reactiveValues(data = NULL)
-  observeEvent(input$find, {
-    # datalist = dataInput() 
-    # data = datalist[[1]]
-    data = data.df()
-    
-    special_point$data = data %>% filter(UNIT == input$find_unit & ID == input$find_id)
-    print(special_point$data)
   })
   
 }
