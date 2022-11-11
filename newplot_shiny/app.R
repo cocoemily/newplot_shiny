@@ -55,6 +55,11 @@ ui <- fluidPage(
               tabPanel("Plots", 
                        sidebarLayout(position = "right",
                                      sidebarPanel(
+                                       fluidRow(
+                                         selectInput("select_view", label = "Select point view", 
+                                                     choices = list("Points" = 1, "Multi-points" = 2), 
+                                                     selected = 1)
+                                       ),
                                        fluidRow( 
                                          wellPanel(
                                            fluidRow(textInput("find_unit", "UNIT"), 
@@ -113,7 +118,7 @@ ui <- fluidPage(
                        
                        fluidRow(tableOutput("info"))
               ), 
-               
+              
               navbarMenu("More", 
                          tabPanel("Units", 
                                   dataTableOutput("units")
@@ -264,17 +269,42 @@ server <- function(input, output, session) {
       front_ranges$y <- c(min(data$Z) - 100, max(data$Z) + 100)
     }
     
-    if(!is.null(special_point$data)) {
-      ggplot(data, aes(x = X, y = Z, label = ID)) +
-        geom_point() +
-        geom_point(data = special_point$data, color = "red", size = 3) +
-        geom_label_repel(size = 2) +
-        coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+    if(input$select_view == 2) {
+      dataToClean = data.df()
+      dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
+      data = dataToClean
     } else {
-      ggplot(data, aes(x = X, y = Z, label = ID)) +
-        geom_point() +
-        geom_label_repel(size = 2) +
-        coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      data = data.df()
+    }
+    
+    if(!is.null(special_point$data)) {
+      if(input$select_view == 2) {
+        ggplot(data, aes(x = X, y = Z, label = ID , group = grp)) +
+          geom_point() +
+          geom_line() +
+          geom_point(data = special_point$data, color = "red", size = 3) +
+          geom_label_repel(size = 2) +
+          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      } else {
+        ggplot(data, aes(x = X, y = Z, label = ID)) +
+          geom_point() +
+          geom_point(data = special_point$data, color = "red", size = 3) +
+          geom_label_repel(size = 2) +
+          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      }
+    }else {
+      if(input$select_view == 2) {
+        ggplot(data, aes(x = X, y = Z, label = ID, group = grp)) +
+          geom_point() +
+          geom_line() +
+          geom_label_repel(size = 2) +
+          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      } else {
+        ggplot(data, aes(x = X, y = Z, label = ID)) +
+          geom_point() +
+          geom_label_repel(size = 2) +
+          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      }
     }
   })
   
