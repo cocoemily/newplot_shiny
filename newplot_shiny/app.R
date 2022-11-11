@@ -334,18 +334,43 @@ server <- function(input, output, session) {
       side_ranges$y <- c(min(data$Z) - 100, max(data$Z) + 100)
     }
     
+    if(input$select_view == 2) {
+      dataToClean = data.df()
+      dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
+      data = dataToClean
+    } else {
+      data = data.df()
+    }
+    
     #draw side view
     if(!is.null(special_point$data)) {
-      ggplot(data, aes(x = Y, y = Z, label = ID)) +
-        geom_point() +
-        geom_point(data = special_point$data, color = "red", size = 3) +
-        geom_label_repel(size = 2) +
-        coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
-    } else {
-      ggplot(data, aes(x = Y, y = Z, label = ID)) +
-        geom_point() +
-        geom_label_repel(size = 2) +
-        coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
+      if(input$select_view == 2) {
+        ggplot(data, aes(x = Y, y = Z, label = ID , group = grp)) +
+          geom_point() +
+          geom_line() +
+          geom_point(data = special_point$data, color = "red", size = 3) +
+          geom_label_repel(size = 2) +
+          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      } else {
+        ggplot(data, aes(x = Y, y = Z, label = ID)) +
+          geom_point() +
+          geom_point(data = special_point$data, color = "red", size = 3) +
+          geom_label_repel(size = 2) +
+          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      }
+    }else {
+      if(input$select_view == 2) {
+        ggplot(data, aes(x = Y, y = Z, label = ID, group = grp)) +
+          geom_point() +
+          geom_line() +
+          geom_label_repel(size = 2) +
+          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      } else {
+        ggplot(data, aes(x = Y, y = Z, label = ID)) +
+          geom_point() +
+          geom_label_repel(size = 2) +
+          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      }
     }
   })
   
@@ -375,18 +400,43 @@ server <- function(input, output, session) {
       plan_ranges$y <- c(min(data$Y) - 100, max(data$Y) + 100)
     }
     
+    if(input$select_view == 2) {
+      dataToClean = data.df()
+      dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
+      data = dataToClean
+    } else {
+      data = data.df()
+    }
+    
     #draw plan view
     if(!is.null(special_point$data)) {
-      ggplot(data, aes(x = X, y = Y, label = ID)) +
-        geom_point() +
-        geom_point(data = special_point$data, color = "red", size = 3) +
-        geom_label_repel(size = 2) +
-        coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
-    } else {
-      ggplot(data, aes(x = X, y = Y, label = ID)) +
-        geom_point() +
-        geom_label_repel(size = 2) +
-        coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
+      if(input$select_view == 2) {
+        ggplot(data, aes(x = X, y = Y, label = ID , group = grp)) +
+          geom_point() +
+          geom_line() +
+          geom_point(data = special_point$data, color = "red", size = 3) +
+          geom_label_repel(size = 2) +
+          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      } else {
+        ggplot(data, aes(x = X, y = Y, label = ID)) +
+          geom_point() +
+          geom_point(data = special_point$data, color = "red", size = 3) +
+          geom_label_repel(size = 2) +
+          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      }
+    }else {
+      if(input$select_view == 2) {
+        ggplot(data, aes(x = X, y = Y, label = ID, group = grp)) +
+          geom_point() +
+          geom_line() +
+          geom_label_repel(size = 2) +
+          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      } else {
+        ggplot(data, aes(x = X, y = Y, label = ID)) +
+          geom_point() +
+          geom_label_repel(size = 2) +
+          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      }
     }
   })
   
