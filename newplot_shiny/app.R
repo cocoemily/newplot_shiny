@@ -14,6 +14,7 @@ if(!require(rjson)){install.packages("rjson")}
 if(!require(DT)){install.packages("DT")}
 if(!require(shinythemes)){install.packages("shinythemes")}
 if(!require(gtools)){install.packages("gtools")}
+if(!require(ggthemes)){install.packages("ggthemes")}
 
 library(shiny)
 library(tidyverse)
@@ -22,6 +23,7 @@ library(rjson)
 library(DT)
 library(shinythemes)
 library(gtools)
+library(ggthemes)
 
 
 theme_set(theme_bw())
@@ -37,11 +39,11 @@ ui <- fluidPage(
   # Application title
   #titlePanel("newplot"),
   
-  # fluidRow(fileInput("input_cfg", "Upload EDM CFG file", width = "100%",
-  #                    accept = c(".cfg"))),
+  fluidRow(fileInput("input_cfg", "Upload EDM CFG file", width = "100%",
+                     accept = c(".cfg"))),
   
-  fluidRow(fileInput("input_data", "Upload EDM JSON or CSV file", width = "100%",
-                     accept = c(".json", ".csv"))),
+  # fluidRow(fileInput("input_data", "Upload EDM JSON or CSV file", width = "100%",
+  #                    accept = c(".json", ".csv"))),
   
   
   navbarPage( "newplot", 
@@ -140,6 +142,7 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   
   jsondata = reactiveVal()
+  dbname = reactiveVal()
   
   data.df = reactiveVal()
   orig.df = reactiveVal()
@@ -148,68 +151,47 @@ server <- function(input, output, session) {
   units.df = reactiveVal()
   datums.df = reactiveVal
   
-  ##TODO figure this out
-  # cfgInput = reactive( {
-  #   req(input$input_cfg)
-  #   inFile = input$input_cfg
-  #   ext = tools::file_ext(inFile$datapath)
-  #   
-  #   file = read_tsv(inFile$datapath)
-  #   
-  #   data.df(file)
-  #   print(data.df)
-  #   
-  #   return(file)
-  #   
-  # })
-  
-  dataInput = reactive({
-    req(input$input_data)
-    inFile = input$input_data
-    
+  #TODO figure this out
+  cfgInput = reactive( {
+    req(input$input_cfg)
+    inFile = input$input_cfg
     ext = tools::file_ext(inFile$datapath)
+
+    file = readLines(inFile$datapath)
+    database = data[grepl("DATABASE", data)]
+    name = str_remove(database, "DATABASE=")
     
-    if(ext == "csv") {
-      df = read_csv(inFile$datapath)
-      data.df(df)
-      orig.df(df)
-      return(list(df, NULL, NULL, NULL))
+    jdata = fromJSON(file = name)
+    jsondata(jdata)
+    dbname(name)
+    
+    dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
+    dflist = list()
+    for(i in 1:length(jdata[[dataname]])) {
+      dflist[[i]] = as.data.frame(jdata[[dataname]][[i]])
     }
+    data = as.data.frame(do.call(smartbind, dflist))
+    data[c(1:4, 6:8)] = sapply(data[c(1:4, 6:8)], as.numeric)
+    data.df(data)
+    orig.df(data)
     
-    if(ext == "json") {
-      jdata = fromJSON(file = inFile$datapath)
-      jsondata(jdata)
-      
-      dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
-      dflist = list()
-      for(i in 1:length(jdata[[dataname]])) {
-        dflist[[i]] = as.data.frame(jdata[[dataname]][[i]])
-      }
-      data = as.data.frame(do.call(smartbind, dflist))
-      data[c(1:4, 6:8)] = sapply(data[c(1:4, 6:8)], as.numeric)
-      data.df(data)
-      orig.df(data)
-      
-      prisms = as.data.frame(do.call(rbind, jdata$prisms))
-      prisms[c(2:3)] = sapply(prisms[c(2:3)], as.numeric)
-      prisms.df(prisms)
-      units = as.data.frame(do.call(rbind, jdata$units))
-      units[c(2:5)] = sapply(units[c(2:5)], as.numeric)
-      units.df(units)
-      datums = as.data.frame(do.call(rbind, jdata$datums))
-      datums[c(2:4)] = sapply(datums[c(2:4)], as.numeric)
-      datums.df(datums)
-      
-      return(list(data, units, prisms, datums))
-      
-    }
+    prisms = as.data.frame(do.call(rbind, jdata$prisms))
+    prisms[c(2:3)] = sapply(prisms[c(2:3)], as.numeric)
+    prisms.df(prisms)
+    units = as.data.frame(do.call(rbind, jdata$units))
+    units[c(2:5)] = sapply(units[c(2:5)], as.numeric)
+    units.df(units)
+    datums = as.data.frame(do.call(rbind, jdata$datums))
+    datums[c(2:4)] = sapply(datums[c(2:4)], as.numeric)
+    datums.df(datums)
     
-    
+    return(list(data, units, prisms, datums))
+
   })
   
   output$printDF <- renderDT({
     if(is.null(data.df())) {
-      datalist = dataInput()
+      datalist = cfgInput()
       data = datalist[[1]]
     } else {
       data = data.df()
@@ -449,7 +431,7 @@ server <- function(input, output, session) {
     # datalist = dataInput() 
     # data = datalist[[1]]
     if(is.null(data.df())) {
-      datalist = dataInput()
+      datalist = cfgInput()
       data = datalist[[1]]
     } else {
       data = data.df()
@@ -476,7 +458,7 @@ server <- function(input, output, session) {
     sp.df = split(units.df(), row(units.df()))
     jdata$units <- sp.df
     jsondata(jdata)
-    write(toJSON(jdata), "test.json")
+    write(toJSON(jdata), dbname())
     
   })
   
@@ -494,7 +476,7 @@ server <- function(input, output, session) {
     sp.df = split(prisms.df(), row(prisms.df()))
     jdata$prisms <- sp.df
     jsondata(jdata)
-    write(toJSON(jdata), "test.json")
+    write(toJSON(jdata), dbname())
     
   })
   
@@ -512,7 +494,7 @@ server <- function(input, output, session) {
     sp.df = split(datums.df(), row(datums.df()))
     jdata$datums <- sp.df
     jsondata(jdata)
-    write(toJSON(jdata), "test.json")
+    write(toJSON(jdata), dbname())
     
   })
   
@@ -578,7 +560,7 @@ server <- function(input, output, session) {
     #print(jdata[[dataname]])
     jdata[[dataname]] <- sp.df
     jsondata(jdata)
-    write(toJSON(jdata), "test.json")
+    write(toJSON(jdata), dbname())
     
   })
   
