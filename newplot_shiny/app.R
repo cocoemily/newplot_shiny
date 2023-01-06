@@ -39,30 +39,39 @@ ui <- fluidPage(
   # Application title
   #titlePanel("newplot"),
   
+  #### Upload CFG input####
   fluidRow(fileInput("input_cfg", "Upload EDM CFG file", width = "100%",
                      accept = c(".cfg"))),
   
   # fluidRow(fileInput("input_data", "Upload EDM JSON or CSV file", width = "100%",
   #                    accept = c(".json", ".csv"))),
   
-  
+  #### newplot ####
   navbarPage( "newplot", 
+              ##### data table view ####
               tabPanel("Data table", 
-                       ##for testing
                        tabPanel("Table view",
                                 DTOutput("printDF", 
                                          width = "auto"), 
-                                #column(width = 12, downloadButton("download", class = "btn-block"))
+                                column(width = 12, downloadButton("download", class = "btn-block"))
                        )
               ),
-              
+              ##### plots view ####
               tabPanel("Plots", 
                        sidebarLayout(position = "right",
                                      sidebarPanel(
+                                       fluidRow(downloadButton("plot_download", class = "btn-block")),
                                        fluidRow(
-                                         selectInput("select_view", label = "Select point view", 
-                                                     choices = list("Points" = 1, "Multi-points" = 2), 
-                                                     selected = 1)
+                                         wellPanel(
+                                           selectInput("select_view", label = "Select point view", 
+                                                       choices = list("Points" = 1, "Multi-points" = 2), 
+                                                       selected = 1),
+                                           uiOutput("unit_select"),
+                                           uiOutput("level_select"),
+                                           uiOutput("code_select"),
+                                           checkboxGroupInput("color_select", label = "Color points by...", 
+                                                              choices = list("Code" = 1, "Unit" = 2, "Level" = 3)),
+                                         ), 
                                        ),
                                        fluidRow( 
                                          wellPanel(
@@ -71,11 +80,7 @@ ui <- fluidPage(
                                            actionButton("find", label = "Find record")
                                          )
                                        ),
-                                       fluidRow( 
-                                         wellPanel(
-                                           actionButton("edit", label = "Edit record")
-                                         )
-                                       )
+                                       
                                      ),
                                      
                                      # numericInput("x", label = "New x value", value = NULL),
@@ -114,13 +119,18 @@ ui <- fluidPage(
                                                                           id = "plan_brush",
                                                                           resetOnNew = TRUE
                                                                         ))
-                                                    ) 
+                                                    ),
+                                                    footer = fluidRow(column(12, tableOutput("info")), 
+                                                                      column(12,
+                                                                             actionButton("edit", label = "Edit record")
+                                                                      )),
                                                     
                                        )
                                      )
                        ),
                        
-                       fluidRow(tableOutput("info"))
+                       
+                       
               ), 
               
               navbarMenu("More", 
@@ -141,6 +151,7 @@ ui <- fluidPage(
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
   
+  #### Reactive Values ####
   jsondata = reactiveVal()
   dbname = reactiveVal()
   
@@ -151,19 +162,21 @@ server <- function(input, output, session) {
   units.df = reactiveVal()
   datums.df = reactiveVal
   
-  #TODO figure this out
+  #### Read from CFG ####
   cfgInput = reactive( {
     req(input$input_cfg)
     inFile = input$input_cfg
     ext = tools::file_ext(inFile$datapath)
-
+    
     file = readLines(inFile$datapath)
-    database = data[grepl("DATABASE", data)]
+    database = file[grepl("DATABASE", file)]
     name = str_remove(database, "DATABASE=")
+    table = file[grepl("TABLE", file)]
+    tname = str_remove(table, "TABLE=")
     
     jdata = fromJSON(file = name)
     jsondata(jdata)
-    dbname(name)
+    dbname(tname)
     
     dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
     dflist = list()
@@ -186,9 +199,32 @@ server <- function(input, output, session) {
     datums.df(datums)
     
     return(list(data, units, prisms, datums))
-
+    
   })
   
+  #### Select input rendering ####
+  output$unit_select = renderUI({
+    data = data.df()
+    selectInput("select_units", label = "Select units", 
+                choices = data$UNIT, multiple = T)
+    
+  })
+  
+  output$level_select = renderUI({
+    data = data.df()
+    selectInput("select_levels", label = "Select levels", 
+                choices = data$LEVEL, multiple = T)
+    
+  })
+  
+  output$code_select = renderUI({
+    data = data.df()
+    selectInput("select_levels", label = "Select levels", 
+                choices = data$CODE, multiple = T)
+    
+  })
+  
+  #### Data Table View ####
   output$printDF <- renderDT({
     if(is.null(data.df())) {
       datalist = cfgInput()
@@ -202,6 +238,7 @@ server <- function(input, output, session) {
   selection = "none"
   )
   
+  ##### edit data table #####
   observeEvent(input$printDF_cell_edit, {
     info = input$printDF_cell_edit
     str(info)
@@ -221,17 +258,19 @@ server <- function(input, output, session) {
     write(toJSON(jdata), "test.json")
   })
   
-  
+  ##### download from data table #####
   output$download = downloadHandler(
     filename = function() {
-      paste0(tools::file_path_sans_ext((input$input_data$name)), Sys.Date(), ".csv")
+      name = dbname()
+      
+      return(paste0(name, "_", Sys.Date(), ".csv"))
     },
     content = function(file) {
-      #TODO deal with this
-      vroom::vroom_write(data.df(), file)
+      vroom::vroom_write(data.df(), file, delim = ",")
     }
   )
   
+  #### Plotting ####
   special_point <- reactiveValues(data = NULL)
   observeEvent(input$find, {
     # datalist = dataInput() 
@@ -256,38 +295,44 @@ server <- function(input, output, session) {
       front_ranges$y <- c(min(data$Z) - 100, max(data$Z) + 100)
     }
     
+    
+    dataToClean = data.df()
+    dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
+    data = dataToClean
+    
+    #####draw front view#####
+    baseplot = ggplot(data, aes(x = X, y = Z)) +
+      geom_point() +
+      coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+    p = baseplot
+    
     if(input$select_view == 2) {
-      dataToClean = data.df()
-      dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
-      data = dataToClean
-    } else {
-      data = data.df()
+      p = p + geom_line(aes(group = grp))
     }
     
     if(!is.null(special_point$data)) {
-      if(input$select_view == 2) {
-        ggplot(data, aes(x = X, y = Z, group = grp)) +
-          geom_point() +
-          geom_line() +
-          geom_point(data = special_point$data, color = "red", size = 3) +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
-      } else {
-        ggplot(data, aes(x = X, y = Z)) +
-          geom_point() +
-          geom_point(data = special_point$data, color = "red", size = 3) +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      p = p + geom_point(data = special_point$data, color = "red", size = 3) 
+    }
+    
+    if(!is.null(input$color_select)) {
+      if(input$color_select == 1) { #code
+        return(
+          p + geom_point(aes(x = X, y = Z, color = CODE)) +
+            scale_color_colorblind()
+        )
+      } else if(input$color_select == 2) { #unit
+        return(
+          p + geom_point(aes(x = X, y = Z, color = UNIT)) +
+            scale_color_colorblind()
+        )
+      } else { #level
+        return(
+          p + geom_point(aes(x = X, y = Z, color = LEVEL)) +
+            scale_color_colorblind()
+        )
       }
-    }else {
-      if(input$select_view == 2) {
-        ggplot(data, aes(x = X, y = Z, group = grp)) +
-          geom_point() +
-          geom_line() +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
-      } else {
-        ggplot(data, aes(x = X, y = Z)) +
-          geom_point() +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
-      }
+    } else {
+      return(p)
     }
   })
   
@@ -317,39 +362,44 @@ server <- function(input, output, session) {
       side_ranges$y <- c(min(data$Z) - 100, max(data$Z) + 100)
     }
     
+    
+    dataToClean = data.df()
+    dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
+    data = dataToClean
+    
+    #####draw side view#####
+    baseplot = ggplot(data, aes(x = Y, y = Z)) +
+      geom_point() +
+      coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
+    p = baseplot
+    
     if(input$select_view == 2) {
-      dataToClean = data.df()
-      dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
-      data = dataToClean
-    } else {
-      data = data.df()
+      p = p + geom_line(aes(group = grp))
     }
     
-    #draw side view
     if(!is.null(special_point$data)) {
-      if(input$select_view == 2) {
-        ggplot(data, aes(x = Y, y = Z, group = grp)) +
-          geom_point() +
-          geom_line() +
-          geom_point(data = special_point$data, color = "red", size = 3) +
-          coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
-      } else {
-        ggplot(data, aes(x = Y, y = Z)) +
-          geom_point() +
-          geom_point(data = special_point$data, color = "red", size = 3) +
-          coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
+      p = p + geom_point(data = special_point$data, color = "red", size = 3) 
+    }
+    
+    if(!is.null(input$color_select)) {
+      if(input$color_select == 1) { #code
+        return(
+          p + geom_point(aes(x = Y, y = Z, color = CODE)) +
+            scale_color_colorblind()
+        )
+      } else if(input$color_select == 2) { #unit
+        return(
+          p + geom_point(aes(x = Y, y = Z, color = UNIT)) +
+            scale_color_colorblind()
+        )
+      } else { #level
+        return(
+          p + geom_point(aes(x = Y, y = Z, color = LEVEL)) +
+            scale_color_colorblind()
+        )
       }
-    }else {
-      if(input$select_view == 2) {
-        ggplot(data, aes(x = Y, y = Z, group = grp)) +
-          geom_point() +
-          geom_line() +
-          coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
-      } else {
-        ggplot(data, aes(x = Y, y = Z)) +
-          geom_point() +
-          coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
-      }
+    } else {
+      return(p)
     }
   })
   
@@ -387,31 +437,39 @@ server <- function(input, output, session) {
       data = data.df()
     }
     
-    #draw plan view
+    ##### draw plan view #####
+    baseplot = ggplot(data, aes(x = X, y = Y)) +
+      geom_point() +
+      coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
+    p = baseplot
+    
+    if(input$select_view == 2) {
+      p = p + geom_line(aes(group = grp))
+    }
+    
     if(!is.null(special_point$data)) {
-      if(input$select_view == 2) {
-        ggplot(data, aes(x = X, y = Y, group = grp)) +
-          geom_point() +
-          geom_line() +
-          geom_point(data = special_point$data, color = "red", size = 3) +
-          coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
-      } else {
-        ggplot(data, aes(x = X, y = Y)) +
-          geom_point() +
-          geom_point(data = special_point$data, color = "red", size = 3) +
-          coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
+      p = p + geom_point(data = special_point$data, color = "red", size = 3) 
+    }
+    
+    if(!is.null(input$color_select)) {
+      if(input$color_select == 1) { #code
+        return(
+          p + geom_point(aes(x = X, y = Y, color = CODE)) +
+            scale_color_colorblind()
+        )
+      } else if(input$color_select == 2) { #unit
+        return(
+          p + geom_point(aes(x = X, y = Y, color = UNIT)) +
+            scale_color_colorblind()
+        )
+      } else { #level
+        return(
+          p + geom_point(aes(x = X, y = Y, color = LEVEL)) +
+            scale_color_colorblind()
+        )
       }
-    }else {
-      if(input$select_view == 2) {
-        ggplot(data, aes(x = X, y = Y, group = grp)) +
-          geom_point() +
-          geom_line() +
-          coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
-      } else {
-        ggplot(data, aes(x = X, y = Y)) +
-          geom_point() +
-          coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
-      }
+    } else {
+      return(p)
     }
   })
   
@@ -427,6 +485,7 @@ server <- function(input, output, session) {
     }
   })
   
+  ##### data table for clicked point #####
   output$info = renderTable(striped = T, bordered = T, width = "100%", {
     # datalist = dataInput() 
     # data = datalist[[1]]
@@ -444,6 +503,42 @@ server <- function(input, output, session) {
     nearPoints(df, input$plot_click, threshold = 10, maxpoints = 5, addDist = T)
   })
   
+  ##### download from plot #####
+  output$plot_download = downloadHandler(
+    filename = function() {
+      name = dbname()
+      tab = str_replace(input$plots, " ", "-")
+      
+      return(paste0(name, "_", tab, "_", Sys.Date(), ".csv"))
+    },
+    content = function(file) {
+      data = data.df()
+      zoomed = data
+      
+      print(input$plots)
+      
+      if(input$plots == "Front view") {
+        zoomed = data %>%
+          filter(X >= front_ranges$x[1] & X <= front_ranges$x[2]) %>%
+          filter(Z >= front_ranges$y[1] & Z <= front_ranges$y[2])
+        
+      }else if(input$plots == "Side view") {
+        zoomed = data %>%
+          filter(Y >= side_ranges$x[1] & Y <= side_ranges$x[2]) %>%
+          filter(Z >= side_ranges$y[1] & Z <= side_ranges$y[2])
+        
+      }else { #input$plots == "Plan view"
+        zoomed = data %>%
+          filter(X >= plan_ranges$x[1] & X <= plan_ranges$x[2]) %>%
+          filter(Y >= plan_ranges$y[1] & Y <= plan_ranges$y[2])
+      }
+      
+      vroom::vroom_write(zoomed, file, delim = ",")
+    }
+  )
+  
+  
+  #### Units Data Table ####
   output$units = renderDT({ units.df() },  editable = TRUE, rownames = FALSE, selection = "none")
   observeEvent(input$units_cell_edit, {
     info = input$units_cell_edit
@@ -462,6 +557,8 @@ server <- function(input, output, session) {
     
   })
   
+  
+  #### Prisms Data Table ####
   output$prisms = renderDT({ prisms.df() }, editable = TRUE, rownames = FALSE, selection = "none")
   observeEvent(input$prisms_cell_edit, {
     info = input$prisms_cell_edit
@@ -480,6 +577,8 @@ server <- function(input, output, session) {
     
   })
   
+  
+  #### Datums Data Table ####
   output$datums = renderDT({ datums.df()}, editable = TRUE, rownames = FALSE, selection = "none")
   observeEvent(input$datums_cell_edit, {
     info = input$datums_cell_edit
@@ -498,6 +597,8 @@ server <- function(input, output, session) {
     
   })
   
+  
+  #### Edit point from plot ####
   orig_unit = reactiveVal()
   orig_id = reactiveVal()
   observeEvent(input$edit,  {
