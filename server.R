@@ -1,5 +1,6 @@
 # Define server logic required to draw a histogram
 server <- function(input, output, session) {
+  session$onSessionEnded(stopApp)
   
   #### Reactive Values ####
   jsonfile = reactiveVal()
