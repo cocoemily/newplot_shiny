@@ -31,13 +31,14 @@ ui <- fluidPage(
   
   # Application title
   #titlePanel("newplot"),
+ #navbarPage(
   
   fluidRow(
-    shinyFilesButton('local_json', label='Upload EDM JSON', title='Please select a file', multiple=FALSE)
+    shinyFilesButton('local_json', label='Upload EDM field JSON', title='Please select a file', multiple=FALSE)
   ),
   
   #### newplot ####
-  navbarPage( "newplot", id = "navbar",
+  navbarPage( "newplot_field", id = "navbar",
               ##### data table view ####
               tabPanel("Data table", id = "dt", 
                        tabPanel("Table view",
@@ -157,5 +158,6 @@ ui <- fluidPage(
                          ) 
               )
   )
+  #)
   
 )
