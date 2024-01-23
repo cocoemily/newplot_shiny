@@ -15,6 +15,7 @@ A newplot-like R Shiny app for use with new EDM excavation data collection appli
 - Plot specific codes, units, levels (currently can only make selections from one of these at a time)
 - Color points by code, unit, level
 - Plot units
+- Plot datums
 - Download CSV of point data from those displayed on a plot from plot tabs
 - Download PNG of plot images
 
@@ -27,7 +28,6 @@ A newplot-like R Shiny app for use with new EDM excavation data collection appli
 
 ### Upcoming functions:
 - Plot intersection of specific codes, units, levels (e.g. code lithics from unit X)
-- Plot datums
 - Plot refits (how does this work in original newplot?)
 
 
