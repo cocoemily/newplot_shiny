@@ -32,8 +32,7 @@ A newplot-like R Shiny app for use with new EDM excavation data collection appli
 
 
 ### Things to test
-- need to test with moving between two different machines (one collector and one analyzer)
-  - can R shiny app be run from tablet?
+- can R shiny app be run from tablet?
 - testing Android tablet with total station
 
 
