@@ -281,7 +281,12 @@ server <- function(input, output, session) {
       
       if(!is.null(input$extra_plots)) { ##here can only plot datums
         if("1" %in% input$extra_plots) {
-          ##TODO add datum plotting
+          datums = datums.df()
+          datums = datums %>% select(X, Y, Z) %>%
+            mutate_all(unlist) %>%
+            mutate_all(as.numeric)
+          p = p + geom_point(data = datums, aes(x = X, y = Y), 
+                             size = 5, color = "blue")
         }
       }
       
@@ -377,7 +382,12 @@ server <- function(input, output, session) {
       
       if(!is.null(input$extra_plots)) { ##here can only plot datums
         if("1" %in% input$extra_plots) {
-          ##TODO add datum plotting
+          datums = datums.df()
+          datums = datums %>% select(X, Y, Z) %>%
+            mutate_all(unlist) %>%
+            mutate_all(as.numeric)
+          p = p + geom_point(data = datums, aes(x = X, y = Y), 
+                             size = 5, color = "blue")
         }
       }
       
@@ -476,8 +486,12 @@ server <- function(input, output, session) {
           if(input$extra_plots == 1) { #datums
             if(!is.null(datums.df())) {
               datums = datums.df()
-              #p = p + geom_point(data = datums, aes(x = X, y = Y), size = )
-              #to do when have datums to test
+              datums = datums %>% select(X, Y, Z) %>%
+                mutate_all(unlist) %>%
+                mutate_all(as.numeric)
+              p = p + geom_point(data = datums, aes(x = X, y = Y), 
+                                 size = 5, color = "blue")
+         
             }
           }
           if(input$extra_plots == 2) { #units
@@ -492,14 +506,18 @@ server <- function(input, output, session) {
           }
         } else {
           datums = datums.df()
+          datums = datums %>% select(X, Y, Z) %>%
+            mutate_all(unlist) %>%
+            mutate_all(as.numeric)
           
           units = units.df()
           units = units %>% select(MINX, MAXX, MINY, MAXY) %>%
             mutate_all(unlist) %>%
             mutate_all(as.numeric)
-          ##TODO
+
           p = p +
-            #geom_point() +
+            geom_point(data = datums, aes(x = X, y = Y), 
+                         size = 5, color = "blue") +
             geom_rect(data = units,
                       mapping = aes(xmin = MINX, xmax = MAXX, ymin = MINY, ymax = MAXY), 
                       color = "grey40", alpha = 0)
