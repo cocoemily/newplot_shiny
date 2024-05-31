@@ -72,7 +72,7 @@ server <- function(input, output, session) {
     jdata = fromJSON(file = as.character(inFile$datapath))
     jsondata(jdata)
     
-    dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
+    dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units", "UNIT"))]
     dbname(dataname)
     dflist = list()
     for(i in 1:length(jdata[[dataname]])) {
@@ -82,7 +82,7 @@ server <- function(input, output, session) {
     data.df(data)
     orig.df(data)
     
-    if("prism" %in% names(jdata)) {
+    if("prisms" %in% names(jdata)) {
       prisms = as.data.frame(do.call(rbind, jdata$prisms))
     } else{
       prisms = data.frame()
