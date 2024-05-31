@@ -159,7 +159,7 @@ server <- function(input, output, session) {
     
     jdata = jsondata()
     sp.df = split(data.df(), row(data.df()))
-    dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
+    dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units", "UNIT"))]
     #print(jdata[[dataname]])
     jdata[[dataname]] <- sp.df
     jsondata(jdata)
