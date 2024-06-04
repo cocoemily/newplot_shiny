@@ -62,7 +62,7 @@ ui <- fluidPage(
                                        fluidRow(
                                          wellPanel(
                                            selectInput("select_view", label = "Select point view", 
-                                                       choices = list("Points" = 1, "Multi-points" = 2), 
+                                                       choices = list("All points" = 1, "Multi-points" = 2, "Last points" = 3), 
                                                        selected = 1),
                                            uiOutput("unit_select"),
                                            uiOutput("level_select"),

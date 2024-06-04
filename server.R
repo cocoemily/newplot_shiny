@@ -14,6 +14,9 @@ server <- function(input, output, session) {
   units.df = reactiveVal()
   datums.df = reactiveVal()
   
+  plot.df = reactiveVal()
+  last.points = reactiveVal()
+  
   #### Read file ####
   #####base shiny cfg input#####
   # cfgInput = reactive( {
@@ -68,7 +71,6 @@ server <- function(input, output, session) {
     inFile = parseFilePaths(roots = roots, input$local_json)
     jsonfile(as.character(inFile$datapath))
     
-    
     jdata = fromJSON(file = as.character(inFile$datapath))
     jsondata(jdata)
     
@@ -81,6 +83,11 @@ server <- function(input, output, session) {
     data = as.data.frame(do.call(smartbind, dflist))
     data.df(data)
     orig.df(data)
+    
+    date.data = data %>% filter(str_detect(DATE, "-"))
+    date.data$DATE = strptime(date.data$DATE, format = "%F %H:%M:%S")
+    today.data = date.data %>% filter(date(DATE) == Sys.Date())
+    last.points(today.data)
     
     if("prisms" %in% names(jdata)) {
       prisms = as.data.frame(do.call(rbind, jdata$prisms))
@@ -136,18 +143,23 @@ server <- function(input, output, session) {
       ##there is an issue here that throws an error as soon as File select is clicked
       ##but it doesn't affect how the program functions
       jsonInput()
+      #cdata = data.df()
+      #data = cdata[,c("DATE", "UNIT", "ID", "SUFFIX", "CODE", "LEVEL", "EXCAVATOR", "X", "Y", "Z", "PRISM")]
       data = data.df()
     } else {
+      #cdata = data.df()
+      #data = cdata[,c("DATE", "UNIT", "ID", "SUFFIX", "CODE", "LEVEL", "EXCAVATOR", "X", "Y", "Z", "PRISM")]
       data = data.df()
     }
   },
-  editable = TRUE, 
+  editable = FALSE, 
   rownames = FALSE, 
   selection = "none"
   )
   
   ##### edit data table #####
   observeEvent(input$printDF_cell_edit, {
+    #TODO fix this with prism change and Z change
     info = input$printDF_cell_edit
     str(info)
     i = info$row
@@ -164,7 +176,7 @@ server <- function(input, output, session) {
     jdata[[dataname]] <- sp.df
     jsondata(jdata)
     #write(toJSON(jdata), "test.json")
-    write(toJSON(jdata), jsonfile())
+    #write(toJSON(jdata), jsonfile())
   })
   
   ##### download from data table #####
@@ -210,7 +222,14 @@ server <- function(input, output, session) {
   front_ranges <- reactiveValues(x = NULL, y = NULL)
   front.plot = reactiveVal()
   output$frontView <- renderPlot({
-    data = data.df()
+    #data = data.df()
+    
+    if(input$select_view == 3) {
+      data = last.points()
+    } else {
+      data = data.df()
+    }
+    
     if(!is.null(data)) {
       
       if(is.null(front_ranges$x)) {
@@ -221,39 +240,71 @@ server <- function(input, output, session) {
         front_ranges$y <- c(min(data$Z) - 100, max(data$Z) + 100)
       }
       
-      
-      dataToClean = data.df()
+      if(input$select_view == 3) {
+        dataToClean = last.points()
+      } else {
+        dataToClean = data.df()
+      }
       dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
       data = dataToClean
-      
+      plot.df(data)
+    
       #####draw front view#####
+      s.units = unique(data$UNIT)
       if(!is.null(input$select_units)) {
-        ##filter select units
-        baseplot = ggplot(data %>% filter(UNIT %in% input$select_units)
-                          , aes(x = X, y = Z)) +
-          geom_point() +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
-        
-      } else if(!is.null(input$select_levels)) {
-        ##filter select levels
-        baseplot = ggplot(data %>% filter(LEVEL %in% input$select_levels)
-                          , aes(x = X, y = Z)) +
-          geom_point() +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
-        
-      } else if(!is.null(input$select_code)) {
-        ## filter select codes
-        baseplot = ggplot(data %>% filter(CODE %in% input$select_code)
-                          , aes(x = X, y = Z)) +
-          geom_point() +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
-        
-      } else {
-        ## plot all points
-        baseplot = ggplot(data, aes(x = X, y = Z)) +
-          geom_point() +
-          coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+        s.units = input$select_units
       }
+      
+      s.levels = unique(data$LEVEL)
+      if(!is.null(input$select_levels)) {
+        s.levels = input$select_levels
+      }
+      
+      s.codes = unique(data$CODE)
+      if(!is.null(input$select_code)) {
+        s.codes = input$select_code
+      }
+      
+      pdata = data %>% filter(UNIT %in% s.units) %>%
+        filter(LEVEL %in% s.levels) %>%
+        filter(CODE %in% s.codes)
+      plot.df(pdata)
+      baseplot = ggplot(pdata, aes(x=X, y=Z)) + 
+        geom_point() +
+        coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      
+      # if(!is.null(input$select_units)) {
+      #   ##filter select units
+      #   plot.df(data %>% filter(UNIT %in% input$select_units))
+      #   baseplot = ggplot(data %>% filter(UNIT %in% input$select_units),
+      #                     aes(x = X, y = Z)) +
+      #     geom_point() +
+      #     coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      #   
+      # } else if(!is.null(input$select_levels)) {
+      #   ##filter select levels
+      #   plot.df(data %>% filter(LEVEL %in% input$select_levels))
+      #   baseplot = ggplot(data %>% filter(LEVEL %in% input$select_levels)
+      #                     , aes(x = X, y = Z)) +
+      #     geom_point() +
+      #     coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      #   
+      # } else if(!is.null(input$select_code)) {
+      #   ## filter select codes
+      #   plot.df(data %>% filter(CODE %in% input$select_code))
+      #   baseplot = ggplot(data %>% filter(CODE %in% input$select_code)
+      #                     , aes(x = X, y = Z)) +
+      #     geom_point() +
+      #     coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      #   
+      # } else {
+      #   ## plot all points
+      #   plot.df(data)
+      #   baseplot = ggplot(data, aes(x = X, y = Z)) +
+      #     geom_point() +
+      #     coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
+      # }
+      
       p = baseplot
       
       if(input$select_view == 2) {
@@ -267,7 +318,7 @@ server <- function(input, output, session) {
       if(!is.null(input$color_select)) {
         if(input$color_select == 1) { #code
           p = p + geom_point(aes(x = X, y = Z, color = CODE)) +
-            scale_color_colorblind()
+            scale_color_brewer(palette = "Paired")
           
         } else if(input$color_select == 2) { #unit
           p = p + geom_point(aes(x = X, y = Z, color = UNIT)) +
@@ -312,7 +363,14 @@ server <- function(input, output, session) {
   output$sideView <- renderPlot({
     # datalist = dataInput() 
     # data = datalist[[1]]
-    data = data.df()
+    #data = data.df()
+    
+    if(input$select_view == 3) {
+      data = last.points()
+    } else {
+      data = data.df()
+    }
+    
     if(!is.null(data)) {
       
       if(is.null(side_ranges$x)) {
@@ -324,38 +382,39 @@ server <- function(input, output, session) {
       }
       
       
-      dataToClean = data.df()
+      #dataToClean = data.df()
+      if(input$select_view == 3) {
+        dataToClean = last.points()
+      } else {
+        dataToClean = data.df()
+      }
       dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
       data = dataToClean
+      plot.df(data)
       
       #####draw side view#####
+      s.units = unique(data$UNIT)
       if(!is.null(input$select_units)) {
-        ##filter select units
-        baseplot = ggplot(data %>% filter(UNIT %in% input$select_units)
-                          , aes(x = Y, y = Z)) +
-          geom_point() +
-          coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
-        
-      } else if(!is.null(input$select_levels)) {
-        ##filter select levels
-        baseplot = ggplot(data %>% filter(LEVEL %in% input$select_levels)
-                          , aes(x = Y, y = Z)) +
-          geom_point() +
-          coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
-        
-      } else if(!is.null(input$select_code)) {
-        ##filter select codes
-        baseplot = ggplot(data %>% filter(CODE %in% input$select_code)
-                          , aes(x = Y, y = Z)) +
-          geom_point() +
-          coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
-        
-      } else {
-        ##plot all points
-        baseplot = ggplot(data, aes(x = Y, y = Z)) +
-          geom_point() +
-          coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
+        s.units = input$select_units
       }
+      
+      s.levels = unique(data$LEVEL)
+      if(!is.null(input$select_levels)) {
+        s.levels = input$select_levels
+      }
+      
+      s.codes = unique(data$CODE)
+      if(!is.null(input$select_code)) {
+        s.codes = input$select_code
+      }
+      
+      pdata = data %>% filter(UNIT %in% s.units) %>%
+        filter(LEVEL %in% s.levels) %>%
+        filter(CODE %in% s.codes)
+      plot.df(pdata)
+      baseplot = ggplot(pdata, aes(x = Y, y = Z)) +
+        geom_point() +
+        coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
       p = baseplot
       
       
@@ -370,7 +429,7 @@ server <- function(input, output, session) {
       if(!is.null(input$color_select)) {
         if(input$color_select == 1) { #code
           p = p + geom_point(aes(x = Y, y = Z, color = CODE)) +
-            scale_color_colorblind()
+            scale_color_brewer(palette = "Paired")
         } else if(input$color_select == 2) { #unit
           p = p + geom_point(aes(x = Y, y = Z, color = UNIT)) +
             scale_color_colorblind()
@@ -414,7 +473,12 @@ server <- function(input, output, session) {
   output$planView <- renderPlot({
     # datalist = dataInput() 
     # data = datalist[[1]]
-    data = data.df()
+    if(input$select_view == 3) {
+      data = last.points()
+    } else {
+      data = data.df()
+    }
+    
     if(!is.null(data)) {
       
       if(is.null(plan_ranges$x)) {
@@ -425,39 +489,39 @@ server <- function(input, output, session) {
         plan_ranges$y <- c(min(data$Y) - 100, max(data$Y) + 100)
       }
       
-      if(input$select_view == 2) {
-        dataToClean = data.df()
-        dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
-        data = dataToClean
+      if(input$select_view == 3) {
+        dataToClean = last.points()
       } else {
-        data = data.df()
+        dataToClean = data.df()
       }
       
+      dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
+      data = dataToClean
+      plot.df(data)
+      
       ##### draw plan view #####
+      s.units = unique(data$UNIT)
       if(!is.null(input$select_units)) {
-        ##filter select units
-        baseplot = ggplot(data %>% filter(UNIT %in% input$select_units)) +
-          geom_point(aes(x = X, y = Y)) +
-          coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
-        
-      } else if(!is.null(input$select_levels)) {
-        ##filter select levels
-        baseplot = ggplot(data %>% filter(LEVEL %in% input$select_levels)) +
-          geom_point(aes(x = X, y = Y)) +
-          coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
-        
-      } else if(!is.null(input$select_code)) {
-        ##filter select codes
-        baseplot = ggplot(data %>% filter(CODE %in% input$select_code)) +
-          geom_point(aes(x = X, y = Y)) +
-          coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
-        
-      } else {
-        ##plot all points
-        baseplot = ggplot(data) +
-          geom_point(aes(x = X, y = Y)) +
-          coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
+        s.units = input$select_units
       }
+      
+      s.levels = unique(data$LEVEL)
+      if(!is.null(input$select_levels)) {
+        s.levels = input$select_levels
+      }
+      
+      s.codes = unique(data$CODE)
+      if(!is.null(input$select_code)) {
+        s.codes = input$select_code
+      }
+      
+      pdata = data %>% filter(UNIT %in% s.units) %>%
+        filter(LEVEL %in% s.levels) %>%
+        filter(CODE %in% s.codes)
+      plot.df(pdata)
+      baseplot = ggplot(pdata) +
+        geom_point(aes(x = X, y = Y)) +
+        coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
       p = baseplot
       
       if(input$select_view == 2) {
@@ -471,7 +535,7 @@ server <- function(input, output, session) {
       if(!is.null(input$color_select)) {
         if(input$color_select == 1) { #code
           p = p + geom_point(aes(x = X, y = Y, color = CODE)) +
-            scale_color_colorblind()
+            scale_color_brewer(palette = "Paired")
         } else if(input$color_select == 2) { #unit
           p = p + geom_point(aes(x = X, y = Y, color = UNIT)) +
             scale_color_colorblind()
@@ -491,7 +555,7 @@ server <- function(input, output, session) {
                 mutate_all(as.numeric)
               p = p + geom_point(data = datums, aes(x = X, y = Y), 
                                  size = 5, color = "blue")
-         
+              
             }
           }
           if(input$extra_plots == 2) { #units
@@ -514,10 +578,10 @@ server <- function(input, output, session) {
           units = units %>% select(MINX, MAXX, MINY, MAXY) %>%
             mutate_all(unlist) %>%
             mutate_all(as.numeric)
-
+          
           p = p +
             geom_point(data = datums, aes(x = X, y = Y), 
-                         size = 5, color = "blue") +
+                       size = 5, color = "blue") +
             geom_rect(data = units,
                       mapping = aes(xmin = MINX, xmax = MAXX, ymin = MINY, ymax = MAXY), 
                       color = "grey40", alpha = 0)
@@ -546,11 +610,11 @@ server <- function(input, output, session) {
   output$info = renderTable(striped = T, bordered = T, width = "100%", {
     # datalist = dataInput() 
     # data = datalist[[1]]
-    if(is.null(data.df())) {
+    if(is.null(plot.df())) {
       jsonInput()
-      data = data.df()
+      data = plot.df()
     } else {
-      data = data.df()
+      data = plot.df()
     }
     
     df = data %>%
@@ -681,6 +745,7 @@ server <- function(input, output, session) {
   #### Edit point from plot ####
   orig_unit = reactiveVal()
   orig_id = reactiveVal()
+  orig_prism = reactiveVal()
   observeEvent(input$edit,  {
     # datalist = dataInput() 
     # data = datalist[[1]]
@@ -693,6 +758,7 @@ server <- function(input, output, session) {
     point = nearPoints(df, input$plot_click, threshold = 10, maxpoints = 1, addDist = F)
     orig_unit(point$UNIT)
     orig_id(point$ID)
+    orig_prism(point$PRISM)
     
     showModal(modalDialog(
       title = "Edit",
@@ -723,11 +789,19 @@ server <- function(input, output, session) {
     datarow$ID = input$id_input
     datarow$X = input$x_input
     datarow$Y = input$y_input
-    datarow$Z = input$z_input
     datarow$PRISM = input$prism_input
     datarow$LEVEL = input$level_input
     datarow$CODE = input$code_input
     datarow$EXCAVATOR = input$excav_input
+    
+    if(input$prism_input != orig_prism()) {
+      shot_value = input$z_input + orig_prism() #current stored Z + prism height
+      new_Z = shot_value - input$prism_input
+    } else {
+      new_Z = input$z_input
+    }
+    datarow$Z = new_Z
+    
     print(datarow)
     
     data[input$row_input,] <- datarow
