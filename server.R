@@ -77,10 +77,27 @@ server <- function(input, output, session) {
     dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units", "UNIT"))]
     dbname(dataname)
     dflist = list()
-    for(i in 1:length(jdata[[dataname]])) {
-      dflist[[i]] = as.data.frame(jdata[[dataname]][[i]])
+    points = jdata[[dataname]]
+    for(i in names(points)) {
+      df = as.data.frame(points[[i]])
+      df$ROW = i
+      if("TIME" %in% rownames(df)) {
+        df = df %>% select(c("ROW", "UNIT", "ID", "SUFFIX", "CODE", "LEVEL", "EXCAVATOR", "PRISM", "X", "Y", "Z", "DATE", "TIME", "HANGLE", "VANGLE", "SLOPED", "NOTES")) %>%
+          mutate(HANGLE = as.character(HANGLE), 
+                 VANGLE = as.character(VANGLE), 
+                 SLOPED = as.character(SLOPED))
+      } else {
+        df$TIME = NA
+        df = df %>% select(c("ROW", "UNIT", "ID", "SUFFIX", "CODE", "LEVEL", "EXCAVATOR", "PRISM", "X", "Y", "Z", "DATE", "TIME", "HANGLE", "VANGLE", "SLOPED", "NOTES")) %>%
+          mutate(HANGLE = as.character(HANGLE), 
+                 VANGLE = as.character(VANGLE), 
+                 SLOPED = as.character(SLOPED))
+      }
+      dflist[[as.numeric(i)]] = df
     }
-    data = as.data.frame(do.call(smartbind, dflist))
+    
+    data = bind_rows(dflist)
+    #data = as.data.frame(do.call(smartbind, dflist))
     data.df(data)
     orig.df(data)
     
@@ -96,14 +113,38 @@ server <- function(input, output, session) {
     }
     
     if("units" %in% names(jdata)){
+      # units.list = list()
+      # for(i in names(jdata$units)) {
+      #   unit = as.data.frame(jdata$units[[i]])
+      #   if("RADIUS" %in% rownames(unit)) {
+      #     unit$ROW = i
+      #     unit = unit %>% select("ROW", "ID", "NAME", "MINX", "MINY", "MAXX", "MAXY", "CENTERX", "CENTERY", "RADIUS", "SUFFIX")
+      #   }else {
+      #     unit$ROW = i
+      #     unit$ID = ""
+      #     unit$CENTERX = NA
+      #     unit$CENTERY = NA
+      #     unit$RADIUS = NA
+      #     unit$SUFFIX = 0
+      #     unit = unit %>% select("ROW", "ID", "NAME", "MINX", "MINY", "MAXX", "MAXY", "CENTERX", "CENTERY", "RADIUS", "SUFFIX")
+      #   }
+      #   units.list[[as.numeric(i)]] = unit
+      # }
+      # units = bind_rows(units.list)
       units = as.data.frame(do.call(rbind, jdata$units))
-      #units = as.data.frame(do.call(rbind, jdata[["units"]]))
     } else{
       units = data.frame()
     }
     
     if("datums" %in% names(jdata)) {
-      datums = as.data.frame(do.call(rbind, jdata$datums))
+      datums.list = list()
+      for(i in names(jdata$datums)) {
+        datums.list[[i]] = as.data.frame(jdata$datums[[i]]) %>% select(NAME, X, Y, Z) %>%
+          mutate(X = as.numeric(X), Y = as.numeric(Y), Z = as.numeric(Z))
+      }
+      #datums = as.data.frame(do.call(smartbind, jdata$datums))
+      datums = bind_rows(datums.list)
+      
     } else{
       datums = data.frame()
     }
@@ -143,16 +184,12 @@ server <- function(input, output, session) {
       ##there is an issue here that throws an error as soon as File select is clicked
       ##but it doesn't affect how the program functions
       jsonInput()
-      #cdata = data.df()
-      #data = cdata[,c("DATE", "UNIT", "ID", "SUFFIX", "CODE", "LEVEL", "EXCAVATOR", "X", "Y", "Z", "PRISM")]
       data = data.df()
     } else {
-      #cdata = data.df()
-      #data = cdata[,c("DATE", "UNIT", "ID", "SUFFIX", "CODE", "LEVEL", "EXCAVATOR", "X", "Y", "Z", "PRISM")]
       data = data.df()
     }
   },
-  editable = FALSE, 
+  editable = TRUE, 
   rownames = FALSE, 
   selection = "none"
   )
@@ -161,6 +198,7 @@ server <- function(input, output, session) {
   observeEvent(input$printDF_cell_edit, {
     #TODO fix this with prism change and Z change
     info = input$printDF_cell_edit
+    print(input$printDF_cell_edit)
     str(info)
     i = info$row
     j = info$col + 1
@@ -168,15 +206,17 @@ server <- function(input, output, session) {
     newdf = data.df()
     newdf[i,j] = info$value
     data.df(newdf)
+    plot.df(newdf)
     
     jdata = jsondata()
-    sp.df = split(data.df(), row(data.df()))
+    sp.df = split(newdf %>% select(-ROW), newdf$ROW)
+    
     dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units", "UNIT"))]
     #print(jdata[[dataname]])
     jdata[[dataname]] <- sp.df
     jsondata(jdata)
     #write(toJSON(jdata), "test.json")
-    #write(toJSON(jdata), jsonfile())
+    write(toJSON(jdata), jsonfile())
   })
   
   ##### download from data table #####
@@ -194,7 +234,7 @@ server <- function(input, output, session) {
   #### Plotting ####
   observeEvent(input$clear_plot, {
     updateSelectInput(session, "select_view", 
-                      choices = list("Points" = 1, "Multi-points" = 2), 
+                      choices = list("Points" = 1, "Multi-points" = 2, "Last points" = 3), 
                       selected = 1)
     updateSelectizeInput(session, server = T, "select_units", selected = NULL)
     updateSelectizeInput(session, server = T, "select_levels", selected = NULL)
@@ -248,7 +288,7 @@ server <- function(input, output, session) {
       dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
       data = dataToClean
       plot.df(data)
-    
+      
       #####draw front view#####
       s.units = unique(data$UNIT)
       if(!is.null(input$select_units)) {
@@ -683,7 +723,8 @@ server <- function(input, output, session) {
   
   
   #### Units Data Table ####
-  output$units = renderDT({ units.df() },  editable = TRUE, rownames = FALSE, selection = "none")
+  output$units = renderDT({ units.df() },  editable = FALSE, rownames = FALSE, selection = "none")
+  #TODO fix unit editing
   observeEvent(input$units_cell_edit, {
     info = input$units_cell_edit
     i = info$row
@@ -703,7 +744,8 @@ server <- function(input, output, session) {
   
   
   #### Prisms Data Table ####
-  output$prisms = renderDT({ prisms.df() }, editable = TRUE, rownames = FALSE, selection = "none")
+  output$prisms = renderDT({ prisms.df() }, editable = FALSE, rownames = FALSE, selection = "none")
+  #TODO fix prism editing
   observeEvent(input$prisms_cell_edit, {
     info = input$prisms_cell_edit
     i = info$row
@@ -723,7 +765,8 @@ server <- function(input, output, session) {
   
   
   #### Datums Data Table ####
-  output$datums = renderDT({ datums.df()}, editable = TRUE, rownames = FALSE, selection = "none")
+  output$datums = renderDT({ datums.df()}, editable = FALSE, rownames = FALSE, selection = "none")
+  #TODO fix datum editing
   observeEvent(input$datums_cell_edit, {
     info = input$datums_cell_edit
     i = info$row
@@ -743,6 +786,7 @@ server <- function(input, output, session) {
   
   
   #### Edit point from plot ####
+  orig_row = reactiveVal()
   orig_unit = reactiveVal()
   orig_id = reactiveVal()
   orig_prism = reactiveVal()
@@ -752,19 +796,22 @@ server <- function(input, output, session) {
     data = data.df()
     
     df = data %>%
-      select(UNIT, ID, X, Y, Z, PRISM, LEVEL, CODE, EXCAVATOR)
+      select(ROW, UNIT, ID, SUFFIX, X, Y, Z, PRISM, LEVEL, CODE, EXCAVATOR)
     df = as.data.frame(df)
     
     point = nearPoints(df, input$plot_click, threshold = 10, maxpoints = 1, addDist = F)
+    orig_row(point$ROW)
     orig_unit(point$UNIT)
     orig_id(point$ID)
     orig_prism(point$PRISM)
     
     showModal(modalDialog(
       title = "Edit",
-      conditionalPanel("false", textInput("row_input", label = "row", value = rownames(point))),
+      conditionalPanel("false", textInput("row_input", label = "row", value = point$ROW)),
+      #textInput("row_input", label = "ROW", value = point$ROW),
       textInput("unit_input", label = "UNIT", value = point$UNIT),
       textInput("id_input", label = "ID", value = point$ID),
+      numericInput("suffix_input", label = "SUFFIX", value = point$SUFFIX),
       numericInput("x_input", label = "X", value = point$X),
       numericInput("y_input", label = "Y", value = point$Y), 
       numericInput("z_input", label = "Z", value = point$Z), 
@@ -782,11 +829,13 @@ server <- function(input, output, session) {
   observeEvent(input$submit_edits, {
     removeModal()
     
-    data = data.df()
-    orig = orig.df()
-    datarow = orig[which(orig$UNIT == orig_unit()[[1]] & orig$ID == orig_id())[[1]],]
+    orig = data.df()
+    #datarow = orig[which(orig$UNIT == orig_unit()[[1]] & orig$ID == orig_id())[[1]],]
+    datarow = orig[which(orig$ROW == orig_row())[[1]],]
+    #print(datarow)
     datarow$UNIT = input$unit_input
     datarow$ID = input$id_input
+    datarow$SUFFIX = input$suffix_input
     datarow$X = input$x_input
     datarow$Y = input$y_input
     datarow$PRISM = input$prism_input
@@ -803,17 +852,17 @@ server <- function(input, output, session) {
     datarow$Z = new_Z
     
     print(datarow)
-    
-    data[input$row_input,] <- datarow
-    data.df(data)
+    newdf = data.df()
+    newdf[which(newdf$ROW == orig_row())[[1]],] = datarow
+    data.df(newdf)
+    plot.df(newdf)
     
     jdata = jsondata()
-    sp.df = split(data.df(), row(data.df()))
-    dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units"))]
+    sp.df = split(newdf %>% select(-ROW), newdf$ROW)
+    dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units", "UNIT"))]
     jdata[[dataname]] <- sp.df
     jsondata(jdata)
     write(toJSON(jdata), jsonfile())
-    
   })
   
 }
