@@ -103,8 +103,11 @@ server <- function(input, output, session) {
     
     date.data = data %>% filter(str_detect(DATE, "-"))
     date.data$DATE = strptime(date.data$DATE, format = "%F %H:%M:%S")
-    today.data = date.data %>% filter(date(DATE) == Sys.Date())
-    last.points(today.data)
+    
+    date.data$diff = abs(as.numeric(date(date.data$DATE) - Sys.Date()))
+    last.data = date.data %>% filter(diff == min(diff)) %>%
+      select(-diff)
+    last.points(last.data)
     
     if("prisms" %in% names(jdata)) {
       prisms = as.data.frame(do.call(rbind, jdata$prisms))
