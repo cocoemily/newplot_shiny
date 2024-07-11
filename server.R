@@ -333,84 +333,71 @@ server <- function(input, output, session) {
     } else {
       data = data.df()
     }
+    data = data %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
     
-    if(!is.null(data)) {
-      #dataToClean = data.df()
-      if(input$select_view == 3) {
-        dataToClean = last.points()
-      } else {
-        dataToClean = data.df()
-      }
-      dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
-      data = dataToClean
-      plot.df(data)
-      
-      #####draw side view#####
-      s.units = unique(data$UNIT)
-      if(!is.null(input$select_units)) {
-        s.units = input$select_units
-      }
-      
-      s.levels = unique(data$LEVEL)
-      if(!is.null(input$select_levels)) {
-        s.levels = input$select_levels
-      }
-      
-      s.codes = unique(data$CODE)
-      if(!is.null(input$select_code)) {
-        s.codes = input$select_code
-      }
-      
-      pdata = data %>% filter(UNIT %in% s.units) %>%
-        filter(LEVEL %in% s.levels) %>%
-        filter(CODE %in% s.codes)
-      plot.df(pdata)
-      baseplot = ggplot(pdata, aes(x = Y, y = Z)) +
-        geom_point() +
-        coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
-      p = baseplot
-      
-      
-      if(input$select_view == 2) {
-        p = p + geom_line(aes(group = grp))
-      }
-      
-      if(!is.null(special_point$data)) {
-        p = p + geom_point(data = special_point$data, color = "red", size = 3) 
-      }
-      
-      if(!is.null(input$color_select)) {
-        if(input$color_select == 1) { #code
-          p = p + geom_point(aes(x = Y, y = Z, color = CODE)) +
-            #scale_color_brewer(palette = "Paired")
-            scale_color_colorblind()
-        } else if(input$color_select == 2) { #unit
-          p = p + geom_point(aes(x = Y, y = Z, color = UNIT)) +
-            scale_color_colorblind()
-        } else { #level
-          p = p + geom_point(aes(x = Y, y = Z, color = LEVEL)) +
-            scale_color_colorblind()
-        }
-      }
-      
-      if(!is.null(input$extra_plots)) { ##here can only plot datums
-        if("1" %in% input$extra_plots) {
-          datums = datums.df()
-          datums = datums %>% select(X, Y, Z) %>%
-            mutate_all(unlist) %>%
-            mutate_all(as.numeric)
-          p = p + geom_point(data = datums, aes(x = X, y = Y), 
-                             size = 5, color = "blue")
-        }
-      }
-      
-      side.plot(p)
-      return(p)
+    #####draw side view#####
+    s.units = unique(data$UNIT)
+    if(!is.null(input$select_units)) {
+      s.units = input$select_units
     }
     
+    s.levels = unique(data$LEVEL)
+    if(!is.null(input$select_levels)) {
+      s.levels = input$select_levels
+    }
+    
+    s.codes = unique(data$CODE)
+    if(!is.null(input$select_code)) {
+      s.codes = input$select_code
+    }
+    
+    pdata = data %>% filter(UNIT %in% s.units) %>%
+      filter(LEVEL %in% s.levels) %>%
+      filter(CODE %in% s.codes)
+    plot.df(pdata)
+    baseplot = ggplot(pdata, aes(x = Y, y = Z)) +
+      geom_point() +
+      coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
+    p = baseplot
+    
+    
+    if(input$select_view == 2) {
+      p = p + geom_line(aes(group = grp))
+    }
+    
+    if(!is.null(special_point$data)) {
+      p = p + geom_point(data = special_point$data, color = "red", size = 3) 
+    }
+    
+    if(!is.null(input$color_select)) {
+      if(input$color_select == 1) { #code
+        p = p + geom_point(aes(x = Y, y = Z, color = CODE))
+      } else if(input$color_select == 2) { #unit
+        p = p + geom_point(aes(x = Y, y = Z, color = UNIT))
+      } else { #level
+        p = p + geom_point(aes(x = Y, y = Z, color = LEVEL))
+      }
+      if(!is.null(color_palette())) {
+        p = p + scale_color_brewer(palette = color_palette())
+      }
+    }
+    
+    if(!is.null(input$extra_plots)) { ##here can only plot datums
+      if("1" %in% input$extra_plots) {
+        datums = datums.df()
+        datums = datums %>% select(X, Y, Z) %>%
+          mutate_all(unlist) %>%
+          mutate_all(as.numeric)
+        p = p + geom_point(data = datums, aes(x = X, y = Y), 
+                           size = 5, color = "blue")
+      }
+    }
+    
+    side.plot(p)
+    return(p)
   })
   
-  ##### side zoom ####
+  ##### side zoom #####
   observeEvent(input$side_dblclick, {
     brush = input$side_brush
     if (!is.null(brush)) {
@@ -427,119 +414,104 @@ server <- function(input, output, session) {
   #### plan plot ####
   plan.plot = reactiveVal()
   output$planView <- renderPlot({
-    # datalist = dataInput() 
-    # data = datalist[[1]]
     if(input$select_view == 3) {
       data = last.points()
     } else {
       data = data.df()
     }
+    data = data %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
     
-    if(!is.null(data)) {
-      if(input$select_view == 3) {
-        dataToClean = last.points()
-      } else {
-        dataToClean = data.df()
+    ##### draw plan view #####
+    s.units = unique(data$UNIT)
+    if(!is.null(input$select_units)) {
+      s.units = input$select_units
+    }
+    
+    s.levels = unique(data$LEVEL)
+    if(!is.null(input$select_levels)) {
+      s.levels = input$select_levels
+    }
+    
+    s.codes = unique(data$CODE)
+    if(!is.null(input$select_code)) {
+      s.codes = input$select_code
+    }
+    
+    pdata = data %>% filter(UNIT %in% s.units) %>%
+      filter(LEVEL %in% s.levels) %>%
+      filter(CODE %in% s.codes)
+    plot.df(pdata)
+    baseplot = ggplot(pdata) +
+      geom_point(aes(x = X, y = Y)) +
+      coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
+    p = baseplot
+    
+    if(input$select_view == 2) {
+      p = p + geom_line(aes(group = grp))
+    }
+    
+    if(!is.null(special_point$data)) {
+      p = p + geom_point(data = special_point$data, aes(x = X, y = Y), color = "red", size = 3) 
+    }
+    
+    if(!is.null(input$color_select)) {
+      if(input$color_select == 1) { #code
+        p = p + geom_point(aes(x = X, y = Y, color = CODE))
+      } else if(input$color_select == 2) { #unit
+        p = p + geom_point(aes(x = X, y = Y, color = UNIT))
+      } else { #level
+        p = p + geom_point(aes(x = X, y = Y, color = LEVEL))
       }
-      
-      dataToClean = dataToClean %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
-      data = dataToClean
-      plot.df(data)
-      
-      ##### draw plan view #####
-      s.units = unique(data$UNIT)
-      if(!is.null(input$select_units)) {
-        s.units = input$select_units
+      if(!is.null(color_palette())) {
+        p = p + scale_color_brewer(palette = color_palette())
       }
-      
-      s.levels = unique(data$LEVEL)
-      if(!is.null(input$select_levels)) {
-        s.levels = input$select_levels
-      }
-      
-      s.codes = unique(data$CODE)
-      if(!is.null(input$select_code)) {
-        s.codes = input$select_code
-      }
-      
-      pdata = data %>% filter(UNIT %in% s.units) %>%
-        filter(LEVEL %in% s.levels) %>%
-        filter(CODE %in% s.codes)
-      plot.df(pdata)
-      baseplot = ggplot(pdata) +
-        geom_point(aes(x = X, y = Y)) +
-        coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
-      p = baseplot
-      
-      if(input$select_view == 2) {
-        p = p + geom_line(aes(group = grp))
-      }
-      
-      if(!is.null(special_point$data)) {
-        p = p + geom_point(data = special_point$data, aes(x = X, y = Y), color = "red", size = 3) 
-      }
-      
-      if(!is.null(input$color_select)) {
-        if(input$color_select == 1) { #code
-          p = p + geom_point(aes(x = X, y = Y, color = CODE)) +
-            #scale_color_brewer(palette = "Paired")
-            scale_color_colorblind()
-        } else if(input$color_select == 2) { #unit
-          p = p + geom_point(aes(x = X, y = Y, color = UNIT)) +
-            scale_color_colorblind()
-        } else { #level
-          p = p + geom_point(aes(x = X, y = Y, color = LEVEL)) +
-            scale_color_colorblind()
-        }
-      }
-      
-      if(!is.null(input$extra_plots)) {
-        if(length(input$extra_plots) == 1) {
-          if(input$extra_plots == 1) { #datums
-            if(!is.null(datums.df())) {
-              datums = datums.df()
-              datums = datums %>% select(X, Y, Z) %>%
-                mutate_all(unlist) %>%
-                mutate_all(as.numeric)
-              p = p + geom_point(data = datums, aes(x = X, y = Y), 
-                                 size = 5, color = "blue")
-              
-            }
-          }
-          if(input$extra_plots == 2) { #units
-            units = units.df()
-            units = units %>% select(MINX, MAXX, MINY, MAXY) %>%
+    }
+    
+    if(!is.null(input$extra_plots)) {
+      if(length(input$extra_plots) == 1) {
+        if(input$extra_plots == 1) { #datums
+          if(!is.null(datums.df())) {
+            datums = datums.df()
+            datums = datums %>% select(X, Y, Z) %>%
               mutate_all(unlist) %>%
               mutate_all(as.numeric)
+            p = p + geom_point(data = datums, aes(x = X, y = Y), 
+                               size = 5, color = "blue")
             
-            p = p + geom_rect(data = units,
-                              mapping = aes(xmin = MINX, xmax = MAXX, ymin = MINY, ymax = MAXY), 
-                              color = "grey40", alpha = 0)
           }
-        } else {
-          datums = datums.df()
-          datums = datums %>% select(X, Y, Z) %>%
-            mutate_all(unlist) %>%
-            mutate_all(as.numeric)
-          
+        }
+        if(input$extra_plots == 2) { #units
           units = units.df()
           units = units %>% select(MINX, MAXX, MINY, MAXY) %>%
             mutate_all(unlist) %>%
             mutate_all(as.numeric)
           
-          p = p +
-            geom_point(data = datums, aes(x = X, y = Y), 
-                       size = 5, color = "blue") +
-            geom_rect(data = units,
-                      mapping = aes(xmin = MINX, xmax = MAXX, ymin = MINY, ymax = MAXY), 
-                      color = "grey40", alpha = 0)
+          p = p + geom_rect(data = units,
+                            mapping = aes(xmin = MINX, xmax = MAXX, ymin = MINY, ymax = MAXY), 
+                            color = "grey40", alpha = 0)
         }
+      } else {
+        datums = datums.df()
+        datums = datums %>% select(X, Y, Z) %>%
+          mutate_all(unlist) %>%
+          mutate_all(as.numeric)
+        
+        units = units.df()
+        units = units %>% select(MINX, MAXX, MINY, MAXY) %>%
+          mutate_all(unlist) %>%
+          mutate_all(as.numeric)
+        
+        p = p +
+          geom_point(data = datums, aes(x = X, y = Y), 
+                     size = 5, color = "blue") +
+          geom_rect(data = units,
+                    mapping = aes(xmin = MINX, xmax = MAXX, ymin = MINY, ymax = MAXY), 
+                    color = "grey40", alpha = 0)
       }
-      
-      plan.plot(p)
-      return(p)
     }
     
+    plan.plot(p)
+    return(p)
   })
   
   ##### plan zoom ####
