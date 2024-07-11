@@ -27,8 +27,7 @@ A newplot-like R Shiny app for use with new EDM excavation data collection appli
 
 
 ### Upcoming functions:
-- Plot intersection of specific codes, units, levels (e.g. code lithics from unit X)
-- Plot refits (how does this work in original newplot?)
+- Plot refits
 
 - transfer to a site database
   - need to determine what type of database is going to be used
