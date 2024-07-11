@@ -35,7 +35,7 @@ A newplot-like R Shiny app for use with new EDM excavation data collection appli
 
 ### Things to test
 - can R shiny app be run from tablet?
-- testing Android tablet with total station
+- data table editting writing correctly for EDMpy?
 
 
 

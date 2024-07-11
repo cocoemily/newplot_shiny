@@ -58,25 +58,21 @@ server <- function(input, output, session) {
     }
     
     if("units" %in% names(jdata)){
-      # units.list = list()
-      # for(i in names(jdata$units)) {
-      #   unit = as.data.frame(jdata$units[[i]])
-      #   if("RADIUS" %in% rownames(unit)) {
-      #     unit$ROW = i
-      #     unit = unit %>% select("ROW", "ID", "NAME", "MINX", "MINY", "MAXX", "MAXY", "CENTERX", "CENTERY", "RADIUS", "SUFFIX")
-      #   }else {
-      #     unit$ROW = i
-      #     unit$ID = ""
-      #     unit$CENTERX = NA
-      #     unit$CENTERY = NA
-      #     unit$RADIUS = NA
-      #     unit$SUFFIX = 0
-      #     unit = unit %>% select("ROW", "ID", "NAME", "MINX", "MINY", "MAXX", "MAXY", "CENTERX", "CENTERY", "RADIUS", "SUFFIX")
-      #   }
-      #   units.list[[as.numeric(i)]] = unit
-      # }
-      # units = bind_rows(units.list)
-      units = as.data.frame(do.call(rbind, jdata$units))
+      units.list = list()
+      for(i in names(jdata$units)) {
+        unit = as.data.frame(jdata$units[[i]])
+        unit$ROW = i
+        if(!("RADIUS" %in% rownames(unit))) {
+          unit$ROW = i
+          unit$ID = ""
+          unit$CENTERX = NA
+          unit$CENTERY = NA
+          unit$RADIUS = NA
+        }
+        unit = unit[,c("ROW", "NAME", "MINX", "MINY", "MAXX", "MAXY", "CENTERX", "CENTERY", "RADIUS")]
+        units.list[[as.numeric(i)]] = unit
+      }
+      units = rbindlist(units.list)
     } else{
       units = data.frame()
     }
@@ -87,9 +83,7 @@ server <- function(input, output, session) {
         datums.list[[i]] = as.data.frame(jdata$datums[[i]]) %>% select(NAME, X, Y, Z) %>%
           mutate(X = as.numeric(X), Y = as.numeric(Y), Z = as.numeric(Z))
       }
-      #datums = as.data.frame(do.call(smartbind, jdata$datums))
       datums = rbindlist(datums.list)
-      
     } else{
       datums = data.frame()
     }
@@ -97,7 +91,6 @@ server <- function(input, output, session) {
     prisms.df(prisms)
     units.df(units)
     datums.df(datums)
-    
   })
   
   ##### get most recent points ####  
@@ -105,8 +98,6 @@ server <- function(input, output, session) {
     data = data.df()
     date.data = data %>% filter(str_detect(DATE, "-")) %>%
       mutate(DATE = strftime(DATE, format = "%F %T"))
-    #date.data$DATE = strftime(date.data$DATE, format = "%F %T")
-    
     date.data$diff = abs(as.numeric(date(date.data$DATE) - Sys.Date()))
     last.data = date.data %>% filter(diff == min(diff)) %>%
       select(-diff)
@@ -298,11 +289,7 @@ server <- function(input, output, session) {
     if(!is.null(input$extra_plots)) { ##here can only plot datums
       if("1" %in% input$extra_plots) {
         datums = datums.df()
-        datums = datums %>% select(X, Y, Z) %>%
-          mutate_all(unlist) %>%
-          mutate_all(as.numeric)
-        p = p + geom_point(data = datums, aes(x = X, y = Y), 
-                           size = 5, color = "blue")
+        p = p + geom_point(data = datums, size = 5, color = "blue")
       }
       if("3" %in% input$extra_plots){
         p = p + geom_line(aes(group = grp))
@@ -389,11 +376,7 @@ server <- function(input, output, session) {
     if(!is.null(input$extra_plots)) { ##here can only plot datums
       if("1" %in% input$extra_plots) {
         datums = datums.df()
-        datums = datums %>% select(X, Y, Z) %>%
-          mutate_all(unlist) %>%
-          mutate_all(as.numeric)
-        p = p + geom_point(data = datums, aes(x = X, y = Y), 
-                           size = 5, color = "blue")
+        p = p + geom_point(data = datums, size = 5, color = "blue")
       }
       if("3" %in% input$extra_plots){
         p = p + geom_line(aes(group = grp))
