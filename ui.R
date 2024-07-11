@@ -65,7 +65,7 @@ ui <- fluidPage(
                                          wellPanel(
                                            div(style ="font-size: 11px",
                                                selectInput("select_view", label = "Select point view", 
-                                                           choices = list("All points" = 1, "Multi-points" = 2, "Last points" = 3), 
+                                                           choices = list("All points" = 1, "Last points" = 2), 
                                                            selected = 1),
                                                selectizeInput("select_units", label = "Select units", 
                                                               choices = NULL, multiple = T), 
@@ -75,13 +75,13 @@ ui <- fluidPage(
                                                               choices = NULL, multiple = T),
                                            ),
                                            div(
-                                             div(style="display: inline-block; vertical-align:top; width: 200px; font-size: 11px",
+                                             div(style="display: inline-block; vertical-align:middle; width: 200px; font-size: 11px",
                                                  checkboxGroupInput("color_select", label = "Color points by:", 
                                                                     choices = list("Code" = 1, "Unit" = 2, "Level" = 3), inline = T)
                                              ),
-                                             div(style="display: inline-block; vertical-align:top; font-size: 11px",
+                                             div(style="display: inline-block; vertical-align:middle; font-size: 11px",
                                                  checkboxGroupInput("extra_plots", label = "Plot:", 
-                                                                    choices = list("Datums" = 1, "Units" = 2), 
+                                                                    choices = list("Datums" = 1, "Units" = 2, "Multi-points" = 3), 
                                                                     inline = T)
                                              )
                                            ), 

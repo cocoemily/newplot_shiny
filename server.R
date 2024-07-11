@@ -176,16 +176,14 @@ server <- function(input, output, session) {
   observeEvent(input$clear_plot, {
     data = data.df()
     color_palette(NULL)
-    updateSelectInput(session, "select_view", 
-                      choices = list("Points" = 1, 
-                                     "Multi-points" = 2, 
-                                     "Last points" = 3), 
+    updateSelectInput(session, "select_view", label = "Select point view", 
+                      choices = list("All points" = 1, "Last points" = 2), 
                       selected = 1)
     updateSelectizeInput(session, "select_units", choices = data$UNIT, server = T, selected = NULL)
     updateSelectizeInput(session, "select_levels", choices = data$LEVEL, server = T, selected = NULL)
     updateSelectizeInput(session, "select_code", choices = data$CODE, server = T, selected = NULL)
     updateCheckboxGroupInput(session, "color_select", choices = list("Code" = 1, "Unit" = 2, "Level" = 3), selected = NULL, inline = T)
-    updateCheckboxGroupInput(session, "extra_plots", choices = list("Datums" = 1, "Units" = 2), selected = NULL, inline = T)
+    updateCheckboxGroupInput(session, "extra_plots", choices = list("Datums" = 1, "Units" = 2, "Multi-points" = 3), selected = NULL, inline = T)
   })
   
   ##### highlight "found" point ####
@@ -239,7 +237,7 @@ server <- function(input, output, session) {
   #### front plot ####
   front.plot = reactiveVal()
   output$frontView <- renderPlot({
-    if(input$select_view == 3) {
+    if(input$select_view == 2) {
       data = last.points()
     } else {
       data = data.df()
@@ -273,9 +271,9 @@ server <- function(input, output, session) {
     p = baseplot
     
     #need to fix this so only multi-points are showing
-    if(input$select_view == 2) {
-      p = p + geom_line(aes(group = grp))
-    }
+    # if(input$select_view == 2) {
+    #   p = p + geom_line(aes(group = grp))
+    # }
     
     if(!is.null(special_point$data)) {
       p = p + geom_point(data = special_point$data, color = "red", size = 3) 
@@ -296,6 +294,7 @@ server <- function(input, output, session) {
       }
     }
     
+    ###### plotting datums, units, multi-points ####
     if(!is.null(input$extra_plots)) { ##here can only plot datums
       if("1" %in% input$extra_plots) {
         datums = datums.df()
@@ -305,6 +304,10 @@ server <- function(input, output, session) {
         p = p + geom_point(data = datums, aes(x = X, y = Y), 
                            size = 5, color = "blue")
       }
+      if("3" %in% input$extra_plots){
+        p = p + geom_line(aes(group = grp))
+      }
+      
     }
     
     front.plot(p)
@@ -328,7 +331,7 @@ server <- function(input, output, session) {
   #### side plot ####
   side.plot = reactiveVal()
   output$sideView <- renderPlot({
-    if(input$select_view == 3) {
+    if(input$select_view == 2) {
       data = last.points()
     } else {
       data = data.df()
@@ -361,9 +364,9 @@ server <- function(input, output, session) {
     p = baseplot
     
     
-    if(input$select_view == 2) {
-      p = p + geom_line(aes(group = grp))
-    }
+    # if(input$select_view == 2) {
+    #   p = p + geom_line(aes(group = grp))
+    # }
     
     if(!is.null(special_point$data)) {
       p = p + geom_point(data = special_point$data, color = "red", size = 3) 
@@ -382,6 +385,7 @@ server <- function(input, output, session) {
       }
     }
     
+    ###### plotting datums, units, multi-points ####
     if(!is.null(input$extra_plots)) { ##here can only plot datums
       if("1" %in% input$extra_plots) {
         datums = datums.df()
@@ -390,6 +394,9 @@ server <- function(input, output, session) {
           mutate_all(as.numeric)
         p = p + geom_point(data = datums, aes(x = X, y = Y), 
                            size = 5, color = "blue")
+      }
+      if("3" %in% input$extra_plots){
+        p = p + geom_line(aes(group = grp))
       }
     }
     
@@ -414,7 +421,7 @@ server <- function(input, output, session) {
   #### plan plot ####
   plan.plot = reactiveVal()
   output$planView <- renderPlot({
-    if(input$select_view == 3) {
+    if(input$select_view == 2) {
       data = last.points()
     } else {
       data = data.df()
@@ -446,9 +453,9 @@ server <- function(input, output, session) {
       coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
     p = baseplot
     
-    if(input$select_view == 2) {
-      p = p + geom_line(aes(group = grp))
-    }
+    # if(input$select_view == 2) {
+    #   p = p + geom_line(aes(group = grp))
+    # }
     
     if(!is.null(special_point$data)) {
       p = p + geom_point(data = special_point$data, aes(x = X, y = Y), color = "red", size = 3) 
@@ -467,46 +474,28 @@ server <- function(input, output, session) {
       }
     }
     
+    ###### plotting datums, units, multi-points ####
     if(!is.null(input$extra_plots)) {
-      if(length(input$extra_plots) == 1) {
-        if(input$extra_plots == 1) { #datums
-          if(!is.null(datums.df())) {
-            datums = datums.df()
-            datums = datums %>% select(X, Y, Z) %>%
-              mutate_all(unlist) %>%
-              mutate_all(as.numeric)
-            p = p + geom_point(data = datums, aes(x = X, y = Y), 
-                               size = 5, color = "blue")
-            
-          }
-        }
-        if(input$extra_plots == 2) { #units
-          units = units.df()
-          units = units %>% select(MINX, MAXX, MINY, MAXY) %>%
-            mutate_all(unlist) %>%
-            mutate_all(as.numeric)
-          
-          p = p + geom_rect(data = units,
-                            mapping = aes(xmin = MINX, xmax = MAXX, ymin = MINY, ymax = MAXY), 
-                            color = "grey40", alpha = 0)
-        }
-      } else {
+      if("1" %in% input$extra_plots) {
         datums = datums.df()
         datums = datums %>% select(X, Y, Z) %>%
           mutate_all(unlist) %>%
           mutate_all(as.numeric)
-        
+        p = p + geom_point(data = datums, aes(x = X, y = Y), 
+                           size = 5, color = "blue")
+      }
+      if("2" %in% input$extra_plots) {
         units = units.df()
         units = units %>% select(MINX, MAXX, MINY, MAXY) %>%
           mutate_all(unlist) %>%
           mutate_all(as.numeric)
         
-        p = p +
-          geom_point(data = datums, aes(x = X, y = Y), 
-                     size = 5, color = "blue") +
-          geom_rect(data = units,
-                    mapping = aes(xmin = MINX, xmax = MAXX, ymin = MINY, ymax = MAXY), 
-                    color = "grey40", alpha = 0)
+        p = p + geom_rect(data = units,
+                          mapping = aes(xmin = MINX, xmax = MAXX, ymin = MINY, ymax = MAXY),
+                          color = "grey40", alpha = 0)
+      }
+      if("3" %in% input$extra_plots){
+        p = p + geom_line(aes(x = X, y = Y, group = grp))
       }
     }
     
