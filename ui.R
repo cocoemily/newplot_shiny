@@ -3,6 +3,7 @@ if(!require(shiny)){install.packages("shiny")}
 if(!require(tidyverse)){install.packages("tidyverse")}
 if(!require(ggrepel)){install.packages("ggrepel")}
 if(!require(rjson)){install.packages("rjson")}
+if(!require(data.table)){install.packages("data.table")}
 if(!require(DT)){install.packages("DT")}
 if(!require(shinythemes)){install.packages("shinythemes")}
 if(!require(gtools)){install.packages("gtools")}
@@ -14,6 +15,7 @@ library(shiny)
 library(tidyverse)
 library(ggrepel)
 library(rjson)
+library(data.table)
 library(DT)
 library(shinythemes)
 library(gtools)
@@ -31,10 +33,11 @@ ui <- fluidPage(
   
   # Application title
   #titlePanel("newplot"),
- #navbarPage(
+  #navbarPage(
   
   fluidRow(
-    shinyFilesButton('local_json', label='Upload EDM field JSON', title='Please select a file', multiple=FALSE)
+    shinyFilesButton('local_json', label='Upload EDM field JSON', title='Please select a file', multiple=FALSE), 
+    textOutput("json_file_name", inline = T)
   ),
   
   #### newplot ####
@@ -53,56 +56,56 @@ ui <- fluidPage(
                                      sidebarPanel(
                                        fluidRow(
                                          wellPanel(
+                                           tags$style("#plot_im_download, #plot_download {vertical-align: middle; height: 35px; width: 100%; font-size: 10px;}"),
                                            downloadButton("plot_im_download", class = "btn-block", label = "Download plot as PNG"),
                                            downloadButton("plot_download", class = "btn-block", label = "Download plot data as CSV")
                                          ), 
                                        ),
-                                       #fluidRow(downloadButton("plot_im_download", class = "btn-block", label = "Download PNG")),
-                                       #fluidRow(downloadButton("plot_download", class = "btn-block", label = "Download CSV")),
                                        fluidRow(
                                          wellPanel(
-                                           selectInput("select_view", label = "Select point view", 
-                                                       choices = list("All points" = 1, "Multi-points" = 2, "Last points" = 3), 
-                                                       selected = 1),
-                                           selectizeInput("select_units", label = "Select units", 
-                                                          choices = NULL, multiple = T), 
-                                           selectizeInput("select_levels", label = "Select levels", 
-                                                          choices = NULL, multiple = T),
-                                           selectizeInput("select_code", label = "Select code", 
-                                                          choices = NULL, multiple = T),
+                                           div(style ="font-size: 11px",
+                                               selectInput("select_view", label = "Select point view", 
+                                                           choices = list("All points" = 1, "Multi-points" = 2, "Last points" = 3), 
+                                                           selected = 1),
+                                               selectizeInput("select_units", label = "Select units", 
+                                                              choices = NULL, multiple = T), 
+                                               selectizeInput("select_levels", label = "Select levels", 
+                                                              choices = NULL, multiple = T),
+                                               selectizeInput("select_code", label = "Select code", 
+                                                              choices = NULL, multiple = T),
+                                           ),
                                            div(
-                                             div(style="display: inline-block; vertical-align:top; width: 150px",
+                                             div(style="display: inline-block; vertical-align:top; width: 200px; font-size: 11px",
                                                  checkboxGroupInput("color_select", label = "Color points by:", 
-                                                                    choices = list("Code" = 1, "Unit" = 2, "Level" = 3))
+                                                                    choices = list("Code" = 1, "Unit" = 2, "Level" = 3), inline = T)
                                              ),
-                                             div(style="display: inline-block; vertical-align:top",
+                                             div(style="display: inline-block; vertical-align:top; font-size: 11px",
                                                  checkboxGroupInput("extra_plots", label = "Plot:", 
-                                                                    choices = list("Datums" = 1, "Units (only in plan view)" = 2))
+                                                                    choices = list("Datums" = 1, "Units" = 2), 
+                                                                    inline = T)
                                              )
                                            ), 
-                                           actionButton("clear_plot", label = "Reset plot")
+                                           div(tags$style("#clear_plot {vertical-align: middle; height: 35px; width: 100%; font-size: 10px;}"),
+                                               actionButton("clear_plot", label = "Reset plot")
+                                           ),
                                          ), 
                                        ),
                                        fluidRow( 
                                          wellPanel(
-                                           fluidRow(textInput("find_unit", "UNIT"), 
-                                                    textInput("find_id","ID")), 
-                                           div(
-                                             div(style="display: inline-block; vertical-align:top; width: 150px",
-                                               actionButton("find", label = "Find record")), 
-                                             div(style="display: inline-block; vertical-align:top;",
-                                               actionButton("clear_find", label = "Clear point highlight")
-                                             )
+                                           fluidRow(
+                                             div(style = "font-size: 11px",
+                                             textInput("find_unit", "UNIT"), 
+                                                    textInput("find_id","ID"))
+                                             ), 
+                                           fluidRow(
+                                             tags$style("#find, #clear_find {vertical-align: middle; height: 30px; font-size: 10px;}"),
+                                             column(5, actionButton("find", label = "Find record")), 
+                                             column(5, actionButton("clear_find", label = "Clear point"))
                                            )
                                          )
                                        ),
                                        
                                      ),
-                                     
-                                     # numericInput("x", label = "New x value", value = NULL),
-                                     # numericInput("y", label = "New y value", value = NULL),
-                                     # numericInput("z", label = "New z value", value = NULL)
-                                     
                                      # Show a plot of the generated distribution
                                      mainPanel(
                                        tabsetPanel( id = "plots",
