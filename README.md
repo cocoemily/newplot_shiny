@@ -27,10 +27,10 @@ A newplot-like R Shiny app for use with new EDM excavation data collection appli
 
 
 ### Upcoming functions:
-- Plot refits
+- plot refits
 
 - transfer to a site database
-  - need to determine what type of database is going to be used
+
 
 
 ### Things to test

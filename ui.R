@@ -47,7 +47,9 @@ ui <- fluidPage(
                        tabPanel("Table view",
                                 DTOutput("printDF", 
                                          width = "auto"), 
-                                column(width = 12, downloadButton("download", class = "btn-block", label = "Download CSV"))
+                                
+                                column(width = 6, actionButton("data_transfer", class = "btn-block", label = "Transfer data to Postgres")), 
+                                column(width = 6, downloadButton("download", class = "btn-block", label = "Download CSV"))
                        )
               ),
               ##### plots view ####

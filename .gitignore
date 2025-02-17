@@ -1,5 +1,7 @@
+# development files
 server_dev.R
 ui_dev.R
+newplot_R_dev/
 
 # History files
 .Rhistory
@@ -10,6 +12,7 @@ ui_dev.R
 
 # User-specific files
 .Ruserdata
+.DS_Store
 
 # Example code in package build process
 *-Ex.R

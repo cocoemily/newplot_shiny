@@ -606,7 +606,19 @@ server <- function(input, output, session) {
       return(paste0(name, "_", tab, "_", Sys.Date(), ".csv"))
     },
     content = function(file) {
-      data = data.df()
+      data = plot.df()
+      
+      #TODO need to fix this to get all data from the json not just the filtered data
+      
+      # data.from.json = jsondata()
+      # points.json = data.from.json[[dbname()]]
+      # # points = data.frame(matrix(unlist(points.json), 
+      # #                            ncol = length(points.json[[1]]), byrow = TRUE), 
+      # #                     stringsAsFactors = FALSE)
+      # points = as.data.frame(points.json)
+      # print(points)
+      # 
+      # data = points %>% filter(ID %in% data$ID)
       zoomed = data
       
       if(input$plots == "Front view") {
