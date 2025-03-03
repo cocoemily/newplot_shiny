@@ -38,6 +38,21 @@ server <- function(input, output, session) {
   #### Read files ####
   #####shinyFiles json input#####
   roots = c(root = "~")
+  
+  os <- Sys.info()["sysname"]
+  if (os == "Windows") {
+    print("You are using Windows.")
+    roots = c(root = "..")
+  } else if (os == "Darwin") {
+    print("You are using macOS.")
+    roots = c(root = "~")
+  } else if (os == "Linux") {
+    print("You are using Linux.")
+    roots = c(root = "/")
+  } else {
+    print("Unknown operating system.")
+  }
+  
   shinyFileChoose(input, 'local_json', session=session, root = roots, filetypes=c('json'))
   
   jsonFile = reactive({
