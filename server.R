@@ -6,6 +6,7 @@ server <- function(input, output, session) {
   parentdir = reactiveVal()
   jsonfile = reactiveVal()
   jsondata = reactiveVal()
+  site_name = reactiveVal()
   dbname = reactiveVal()
   
   data.df = reactiveVal()
@@ -49,6 +50,8 @@ server <- function(input, output, session) {
     #get directory path
     fullpath = parseFilePaths(roots = roots, input$local_json)$datapath
     fp_split = str_split(fullpath, "/")[[1]]
+    sitename = str_remove(fp_split[length(fp_split)], ".json")
+    site_name(sitename)
     clean_fp = paste0(fp_split[-length(fp_split)], collapse = "/")
     parentdir(clean_fp)
     
@@ -156,30 +159,87 @@ server <- function(input, output, session) {
     context_table = read.csv(paste0(dbdir, "/context.csv"))
     xyz_table = read.csv(paste0(dbdir, "/xyz.csv"))
     
+    #get or create edit log directory
+    edit_dir = paste0(parentdir(), "/edit_logs")
+    if(!dir.exists(edit_dir)) {
+      dir.create(edit_dir)
+    } 
+    
+    #get or create edit log file
+    edit_fp = paste0(edit_dir, "/", site_name(), "_", Sys.Date(), ".txt")
+    if(!file.exists(edit_fp)) {
+      file.create(edit_fp)
+    } 
+    
     #update Context table
+    old_crow = context_table[which(context_table$Unit == orig_unit() 
+                                   & context_table$ID == orig_id())[[1]],]
     new_crow = context_table[which(context_table$Unit == orig_unit() 
                                    & context_table$ID == orig_id())[[1]],]
     new_crow$Unit = newrow$Unit
+    if(new_crow$Unit != old_crow$Unit) {
+      write(paste0(new_crow$Unit, "-", new_crow$ID, ": unit changed from ", old_crow$Unit, " to ", new_crow$Unit), 
+            file = edit_fp, sep = "\n", append = T)
+    }
     new_crow$ID = newrow$ID
+    if(new_crow$ID != old_crow$ID) {
+      write(paste0(new_crow$Unit, "-", new_crow$ID, ": ID changed from ", old_crow$ID, " to ", new_crow$ID), 
+            file = edit_fp, sep = "\n", append = T)
+    }
     new_crow$SQUID = paste0(newrow$Unit, "-", newrow$ID)
     new_crow$level = newrow$level
+    if(new_crow$level != old_crow$level) {
+      write(paste0(new_crow$Unit, "-", new_crow$ID, ": level changed from ", old_crow$level, " to ", new_crow$level), 
+            file = edit_fp, sep = "\n", append = T)
+    }
     new_crow$code = newrow$code
+    if(new_crow$code != old_crow$code) {
+      write(paste0(new_crow$Unit, "-", new_crow$ID, ": code changed from ", old_crow$code, " to ", new_crow$code), 
+            file = edit_fp, sep = "\n", append = T)
+    }
     new_crow$excavator = newrow$excavator
+    if(new_crow$excavator != old_crow$excavator) {
+      write(paste0(new_crow$Unit, "-", new_crow$ID, ": excavator changed from ", old_crow$excavator, " to ", new_crow$excavator), 
+            file = edit_fp, sep = "\n", append = T)
+    }
     
     context_table[which(context_table$Unit == orig_unit() 
                         & context_table$ID == orig_id())[[1]],] = new_crow
     
     #update XYZ table
+    old_xyzrow = xyz_table[which(xyz_table$Unit == orig_unit() 
+                                 & xyz_table$ID == orig_id() 
+                                 & xyz_table$Suffix == orig_suffix())[[1]],]
     new_xyzrow = xyz_table[which(xyz_table$Unit == orig_unit() 
                                  & xyz_table$ID == orig_id() 
                                  & xyz_table$Suffix == orig_suffix())[[1]],]
     new_xyzrow$Unit = newrow$Unit
     new_xyzrow$ID = newrow$ID
     new_xyzrow$Suffix = newrow$Suffix
+    if(new_xyzrow$Suffix != old_xyzrow$Suffix) {
+      write(paste0(new_xyzrow$Unit, "-", new_xyzrow$ID, ": suffix changed from ", old_xyzrow$Suffix, " to ", new_xyzrow$Suffix), 
+            file = edit_fp, sep = "\n", append = T)
+    }
     new_xyzrow$Prism = newrow$Prism
+    if(new_xyzrow$Prism != old_xyzrow$Prism) {
+      write(paste0(new_xyzrow$Unit, "-", new_xyzrow$ID, ": prism changed from ", old_xyzrow$Prism, " to ", new_xyzrow$Prism), 
+            file = edit_fp, sep = "\n", append = T)
+    }
     new_xyzrow$X = newrow$X
+    if(new_xyzrow$X != old_xyzrow$X) {
+      write(paste0(new_xyzrow$Unit, "-", new_xyzrow$ID, ": X changed from ", old_xyzrow$X, " to ", new_xyzrow$X), 
+            file = edit_fp, sep = "\n", append = T)
+    }
     new_xyzrow$Y = newrow$Y
+    if(new_xyzrow$Y != old_xyzrow$Y) {
+      write(paste0(new_xyzrow$Unit, "-", new_xyzrow$ID, ": Y changed from ", old_xyzrow$Y, " to ", new_xyzrow$Y), 
+            file = edit_fp, sep = "\n", append = T)
+    }
     new_xyzrow$Z = newrow$Z
+    if(new_xyzrow$Z != old_xyzrow$Z) {
+      write(paste0(new_xyzrow$Unit, "-", new_xyzrow$ID, ": Z changed from ", old_xyzrow$Z, " to ", new_xyzrow$Z), 
+            file = edit_fp, sep = "\n", append = T)
+    }
     
     xyz_table[which(xyz_table$Unit == orig_unit() 
                     & xyz_table$ID == orig_id() 
@@ -187,7 +247,6 @@ server <- function(input, output, session) {
     
     write_csv(context_table, file = paste0(dbdir, "/context.csv"))
     write_csv(xyz_table, file = paste0(dbdir, "/xyz.csv"))
-    
   }
   
   
@@ -234,7 +293,7 @@ server <- function(input, output, session) {
       dir.create(ftdir)
     }
     #write field transfer backup first
-    write_delim(data.df(), file = paste0(ftdir, "/", dbname(), "_", Sys.Date(), "_", format(Sys.time(), "%H-%M-%S"), ".txt"))
+    write_delim(data.df(), file = paste0(ftdir, "/", site_name(), "_", dbname(), "_", Sys.Date(), "_", format(Sys.time(), "%H-%M-%S"), ".txt"))
     
     edm_units = data.frame(
       name = character(), 
@@ -410,6 +469,14 @@ server <- function(input, output, session) {
           radius = as.numeric(u.rowdf$RADIUS)
         )
         edm_units = rbind(edm_units, urow)
+      } else {
+        edm_units[which(edm_units$name == u.rowdf$NAME),]$minX = as.numeric(u.rowdf$MINX)
+        edm_units[which(edm_units$name == u.rowdf$NAME),]$minY = as.numeric(u.rowdf$MINY)
+        edm_units[which(edm_units$name == u.rowdf$NAME),]$maxX = as.numeric(u.rowdf$MAXX)
+        edm_units[which(edm_units$name == u.rowdf$NAME),]$maxY = as.numeric(u.rowdf$MAXY)
+        edm_units[which(edm_units$name == u.rowdf$NAME),]$centerX = as.numeric(u.rowdf$CENTERX)
+        edm_units[which(edm_units$name == u.rowdf$NAME),]$centerY = as.numeric(u.rowdf$CENTERY)
+        edm_units[which(edm_units$name == u.rowdf$NAME),]$radius = as.numeric(u.rowdf$RADIUS)
       }
     }
     write_csv(edm_units, file = paste0(dbdir, "/units.csv"))
@@ -424,6 +491,10 @@ server <- function(input, output, session) {
           Z = as.numeric(d.rowdf$Z)
         )
         edm_datums = rbind(edm_datums, drow)
+      } else {
+        edm_datums[which(edm_datums$name == d.rowdf$NAME),]$X = as.numeric(d.rowdf$X)
+        edm_datums[which(edm_datums$name == d.rowdf$NAME),]$Y = as.numeric(d.rowdf$Y)
+        edm_datums[which(edm_datums$name == d.rowdf$NAME),]$Z = as.numeric(d.rowdf$Z)   
       }
     }
     write_csv(edm_datums, file = paste0(dbdir, "/datums.csv"))
@@ -437,6 +508,10 @@ server <- function(input, output, session) {
           offset = as.numeric(p.rowdf$OFFSET)
         )
         edm_poles = rbind(edm_poles, prow)
+      } else {
+        edm_poles[which(edm_poles$name == p.rowdf$NAME),]$height = as.numeric(p.rowdf$HEIGHT)
+        edm_poles[which(edm_poles$name == p.rowdf$NAME),]$offset = as.numeric(p.rowdf$OFFSET)
+        
       }
     }
     write_csv(edm_poles, file = paste0(dbdir, "/poles.csv"))

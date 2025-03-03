@@ -26,6 +26,7 @@ A newplot-like R Shiny app for use with new EDM excavation data collection appli
 - Download PNG of plot images
 - Edit a selected record from plot via a dialog box
 - Save all edits to database CSV files
+- Write daily edit log to track changes made to database files
 
 ### Upcoming functions:
 - Plot refits
