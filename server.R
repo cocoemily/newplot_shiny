@@ -3,11 +3,13 @@ server <- function(input, output, session) {
   session$onSessionEnded(stopApp)
   
   #### Reactive Values ####
+  parentdir = reactiveVal()
   jsonfile = reactiveVal()
   jsondata = reactiveVal()
   dbname = reactiveVal()
   
   data.df = reactiveVal()
+  db.df = reactiveVal()
   prisms.df = reactiveVal()
   units.df = reactiveVal()
   datums.df = reactiveVal()
@@ -15,21 +17,70 @@ server <- function(input, output, session) {
   plot.df = reactiveVal()
   last.points = reactiveVal()
   
-  #### Read file ####
+  #for doing database edits
+  orig_unit = reactiveVal()
+  orig_id = reactiveVal()
+  orig_suffix = reactiveVal()
+  orig_prism = reactiveVal()
+  
+  #### newplot_shiny instructions ####
+  observe({
+    showModal(modalDialog(
+      title = "Welcome to newplot_shiny",
+      HTML("<p>Please transfer the site folder to your computer and open the JSON file in newplot_shiny.</p> 
+      <p>Once the field data has loaded in the data transfer tab, please click transfer data before performing any plotting or edits.</p>
+           <p>If you have questions, contact Emily Coco</p>"),
+      footer = modalButton("Got it")
+    ))
+  })
+  
+  #### Read files ####
   #####shinyFiles json input#####
   roots = c(root = "~")
   shinyFileChoose(input, 'local_json', session=session, root = roots, filetypes=c('json'))
+  
   jsonFile = reactive({
     req(input$local_json)
     if(is.null(input$local_json)) {
       return(NULL)
     }
     jsonfile(parseFilePaths(roots = roots, input$local_json)$datapath)
+    
+    #get directory path
+    fullpath = parseFilePaths(roots = roots, input$local_json)$datapath
+    fp_split = str_split(fullpath, "/")[[1]]
+    clean_fp = paste0(fp_split[-length(fp_split)], collapse = "/")
+    parentdir(clean_fp)
+    
     output$json_file_name <- renderText({parseFilePaths(roots = roots, input$local_json)$datapath})
     return(parseFilePaths(roots = roots, input$local_json)$datapath)
   })
   
-  jsonInput = reactive({
+  #####load database data#####
+  read_database <- function() {
+    dbdir = paste0(parentdir(), "/database")
+    if(dir.exists(dbdir)) {
+      context_table = read.csv(paste0(dbdir, "/context.csv"))
+      xyz_table = read.csv(paste0(dbdir, "/xyz.csv"))
+      
+      db.data = xyz_table %>% left_join(context_table, by = c("Unit", "ID")) %>%
+        select(Unit, ID, Suffix, code, level, excavator, Prism, X, Y, Z, Date, Time, NOTES, last_import)
+      db.df(db.data)
+      
+    } else {
+      db.data = data.frame()
+    }
+  }
+  
+  ##### get most recent points ####  
+  observeEvent(db.df(), { #get last points
+    data = db.df()
+    last.data = data %>% filter(last_import == TRUE)
+    last.points(last.data)
+  })
+  
+  #####load field data#####
+  read_json = function(){
     if(is.null(jsonFile())) {
       return()
     }
@@ -48,6 +99,9 @@ server <- function(input, output, session) {
       dflist[[as.numeric(i)]] = df
     }
     data = rbindlist(dflist)
+    if(nrow(data) == 0) {
+      data = data.frame()
+    }
     data.df(data)
     
     
@@ -91,27 +145,319 @@ server <- function(input, output, session) {
     prisms.df(prisms)
     units.df(units)
     datums.df(datums)
-  })
+    
+    read_database()
+  }
   
-  ##### get most recent points ####  
-  observeEvent(data.df(), { #get last points
+  #### Write files ####
+  write_database_edits = function(newrow) {
+    #get database files
+    dbdir = paste0(parentdir(), "/database")
+    context_table = read.csv(paste0(dbdir, "/context.csv"))
+    xyz_table = read.csv(paste0(dbdir, "/xyz.csv"))
+    
+    #update Context table
+    new_crow = context_table[which(context_table$Unit == orig_unit() 
+                                   & context_table$ID == orig_id())[[1]],]
+    new_crow$Unit = newrow$Unit
+    new_crow$ID = newrow$ID
+    new_crow$SQUID = paste0(newrow$Unit, "-", newrow$ID)
+    new_crow$level = newrow$level
+    new_crow$code = newrow$code
+    new_crow$excavator = newrow$excavator
+    
+    context_table[which(context_table$Unit == orig_unit() 
+                        & context_table$ID == orig_id())[[1]],] = new_crow
+    
+    #update XYZ table
+    new_xyzrow = xyz_table[which(xyz_table$Unit == orig_unit() 
+                                 & xyz_table$ID == orig_id() 
+                                 & xyz_table$Suffix == orig_suffix())[[1]],]
+    new_xyzrow$Unit = newrow$Unit
+    new_xyzrow$ID = newrow$ID
+    new_xyzrow$Suffix = newrow$Suffix
+    new_xyzrow$Prism = newrow$Prism
+    new_xyzrow$X = newrow$X
+    new_xyzrow$Y = newrow$Y
+    new_xyzrow$Z = newrow$Z
+    
+    xyz_table[which(xyz_table$Unit == orig_unit() 
+                    & xyz_table$ID == orig_id() 
+                    & xyz_table$Suffix == orig_suffix())[[1]],] = new_xyzrow
+    
+    write_csv(context_table, file = paste0(dbdir, "/context.csv"))
+    write_csv(xyz_table, file = paste0(dbdir, "/xyz.csv"))
+    
+  }
+  
+  
+  #### Data Transfer View ####
+  output$printDF_json <- renderDT({
+    read_json()
     data = data.df()
-    date.data = data %>% filter(str_detect(DATE, "-")) %>%
-      mutate(DATE = strftime(DATE, format = "%F %T"))
-    date.data$diff = abs(as.numeric(date(date.data$DATE) - Sys.Date()))
-    last.data = date.data %>% filter(diff == min(diff)) %>%
-      select(-diff)
-    last.points(last.data)
+  },
+  editable = FALSE, 
+  rownames = FALSE, 
+  selection = "none"
+  )
+  
+  ##### data transfer #####
+  observeEvent(input$data_transfer, {
+    dbdir = paste0(parentdir(), "/database")
+    ftdir = paste0(parentdir(), "/field-backup")
+    
+    output$point_count <- renderText({paste0("Transferring ", nrow(data.df()), " points")})
+    
+    showModal(modalDialog(
+      title = "Transfer data:", 
+      fluidRow(
+        column(12, textOutput("point_count"))
+      ),
+      fluidRow(
+        column(12, textInput("db_dir", label = "Transfer points to database:", value = dbdir, width = '100%')),
+        column(12, textInput("ft_dir", label = "Backup points in folder:", value = ftdir, width = '100%')),
+      ),
+      actionButton("submit_data_transfer", label = "Confirm data transfer"),
+      easyClose = T,
+      size = "l"
+    ))
   })
   
-  #### Data Table View ####
-  output$printDF <- renderDT({
-    if(is.null(data.df())) {
-      jsonInput()
-      data = data.df()
-    } else {
-      data = data.df()
+  observeEvent(input$submit_data_transfer, {
+    removeModal()
+    
+    dbdir = input$db_dir
+    ftdir = input$ft_dir
+    
+    #check for field transfer backup folder
+    if(!dir.exists(ftdir)) {
+      dir.create(ftdir)
     }
+    #write field transfer backup first
+    write_delim(data.df(), file = paste0(ftdir, "/", dbname(), "_", Sys.Date(), "_", format(Sys.time(), "%H-%M-%S"), ".txt"))
+    
+    edm_units = data.frame(
+      name = character(), 
+      minX = numeric(), 
+      minY = numeric(), 
+      maxX = numeric(), 
+      maxY = numeric(), 
+      centerX = numeric(), 
+      centerY = numeric(), 
+      radius = numeric()
+    )
+    
+    edm_datums = data.frame(
+      name = character(), 
+      X = numeric(), 
+      Y = numeric(), 
+      Z = numeric()
+    )
+    
+    edm_poles = data.frame(
+      name = character(), 
+      height = numeric(), 
+      offset = numeric()
+    )
+    
+    context_table = data.frame(
+      Unit = character(), 
+      ID = character(), 
+      SQUID = character(), 
+      level = character(), 
+      code = character(), 
+      excavator = character(), 
+      recno = numeric(), 
+      NOTES = character()
+    )
+    xyz_table = data.frame(
+      Unit = character(), 
+      ID = character(), 
+      Suffix = numeric(), 
+      Prism = numeric(), 
+      X = numeric(), 
+      Y = numeric(), 
+      Z = numeric(), 
+      Date = character(), 
+      Time = character(),
+      Year = numeric(), 
+      RecordCounter = numeric(), 
+      last_import = logical()
+    )
+    #check for database folder
+    if(!dir.exists(dbdir)) {
+      dir.create(dbdir)
+      write_csv(context_table, file = paste0(dbdir, "/context.csv"))
+      write_csv(xyz_table, file = paste0(dbdir, "/xyz.csv"))
+      write_csv(edm_units, file = paste0(dbdir, "/units.csv"))
+      write_csv(edm_datums, file = paste0(dbdir, "/datums.csv"))
+      write_csv(edm_poles, file = paste0(dbdir, "/poles.csv"))
+    } else {
+      context_table = read.csv(paste0(dbdir, "/context.csv"))
+      xyz_table = read.csv(paste0(dbdir, "/xyz.csv"))
+      xyz_table$last_import = FALSE
+      edm_units = read.csv(paste0(dbdir, "/units.csv"))
+      edm_datums = read.csv(paste0(dbdir, "/datums.csv"))
+      edm_poles = read.csv(paste0(dbdir, "/poles.csv"))
+    }
+    
+    
+    #now write json data to context and xyz dataframes
+    data = data.df()
+    
+    c.recno = 1
+    if(nrow(context_table) > 0) {
+      c.recno = max(context_table$recno, na.rm = T) + 1
+    }
+    xyz.recno = 1
+    if(nrow(xyz_table) > 0) {
+      xyz.recno = max(xyz_table$RecordCounter, na.rm = T) + 1
+    }
+    withProgress(message = "Transferring points", value = 0, {
+      for(i in 1:nrow(data)) {
+        rowdf = data[i,]
+        #stop duplicates in the context table
+        check.context = context_table[0,]
+        if(nrow(context_table) > 0) {
+          check.context = context_table %>% filter(Unit == rowdf$UNIT & ID == rowdf$ID)
+        }
+        
+        if(nrow(check.context) == 0) {
+          crow = data.frame(
+            Unit = as.character(rowdf$UNIT),
+            ID = as.character(rowdf$ID),
+            SQUID = as.character(paste0(rowdf$UNIT, "-", rowdf$ID)),
+            level = as.character(rowdf$LEVEL),
+            code = tolower(as.character(rowdf$CODE)),
+            excavator = as.character(rowdf$EXCAVATOR),
+            recno = c.recno,
+            NOTES = as.character(rowdf$NOTES),
+            stringsAsFactors = FALSE  
+          )
+          context_table = rbind(context_table, crow)
+          c.recno = c.recno + 1
+        }
+        
+        date = Sys.Date()
+        time = format(Sys.time(), "%T")
+        year = as.numeric(format(date, "%Y"))
+        if(str_detect(rowdf$DATE, "/")) {
+          date.string = paste0(
+            substr(rowdf$DATE, 1, nchar(rowdf$DATE) - 8), 
+            " ", 
+            substr(rowdf$DATE, nchar(rowdf$DATE) - 7, nchar(rowdf$DATE))
+          )
+          data.date = strptime(date.string, format="%m/%d/%Y %H:%M:%S")
+          date = format(data.date, "%D")
+          time = format(data.date, "%T")
+          year = format(data.date, "%Y")
+        } else {
+          date = format(as.Date(rowdf$DATE), "%D")
+          time = format(as.Date(rowdf$DATE), "%T")
+          year = format(as.Date(rowdf$DATE), "%Y")
+        }
+        
+        xyzrow = data.frame(
+          Unit = rowdf$UNIT,
+          ID =  rowdf$ID,
+          Suffix = rowdf$SUFFIX,
+          Prism = rowdf$PRISM, 
+          X = rowdf$X, 
+          Y = rowdf$Y,  
+          Z = rowdf$Z,
+          Date = date, 
+          Time = time,
+          Year = year,
+          RecordCounter = xyz.recno,
+          last_import = TRUE,
+          stringsAsFactors = FALSE  
+        )
+        xyz_table = rbind(xyz_table, xyzrow)
+        xyz.recno = xyz.recno + 1
+        
+        incProgress(1/nrow(data), detail = paste0("Transferring point ", i, " of ", nrow(data)))
+      }
+      
+      write_csv(context_table, file = paste0(dbdir, "/context.csv"))
+      write_csv(xyz_table, file = paste0(dbdir, "/xyz.csv"))
+    })
+    
+    #blast points from JSON
+    jdata = jsondata()
+    dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units", "UNIT"))]
+    empty_points = jdata[[dataname]]
+    empty_points[1:length(empty_points)] <- NULL
+    jdata[[dataname]] <- empty_points
+    jsondata(jdata)
+    write(toJSON(jdata), jsonfile())
+    
+    #write datum data, pole data, unit data
+    units = units.df()
+    datums = datums.df()
+    poles = prisms.df()
+    
+    for(i in 1:nrow(units)) {
+      u.rowdf = units[i,]
+      if(!(u.rowdf$NAME %in% edm_units$name)) {
+        urow = data.frame(
+          name = u.rowdf$NAME, 
+          minX = as.numeric(u.rowdf$MINX), 
+          minY = as.numeric(u.rowdf$MINY),
+          maxX = as.numeric(u.rowdf$MAXX), 
+          maxY = as.numeric(u.rowdf$MAXY), 
+          centerX = as.numeric(u.rowdf$CENTERX), 
+          centerY = as.numeric(u.rowdf$CENTERY), 
+          radius = as.numeric(u.rowdf$RADIUS)
+        )
+        edm_units = rbind(edm_units, urow)
+      }
+    }
+    write_csv(edm_units, file = paste0(dbdir, "/units.csv"))
+    
+    for(i in 1:nrow(datums)) {
+      d.rowdf = datums[i,]
+      if(!(d.rowdf$NAME %in% edm_datums$name)) {
+        drow = data.frame(
+          name = d.rowdf$NAME, 
+          X = as.numeric(d.rowdf$X), 
+          Y = as.numeric(d.rowdf$Y), 
+          Z = as.numeric(d.rowdf$Z)
+        )
+        edm_datums = rbind(edm_datums, drow)
+      }
+    }
+    write_csv(edm_datums, file = paste0(dbdir, "/datums.csv"))
+    
+    for(i in 1:nrow(poles)) {
+      p.rowdf = poles[i,]
+      if(!(p.rowdf$NAME %in% edm_poles$name)) {
+        prow = data.frame(
+          name = as.character(p.rowdf$NAME), 
+          height = as.numeric(p.rowdf$HEIGHT), 
+          offset = as.numeric(p.rowdf$OFFSET)
+        )
+        edm_poles = rbind(edm_poles, prow)
+      }
+    }
+    write_csv(edm_poles, file = paste0(dbdir, "/poles.csv"))
+    
+    #trigger reading from json again
+    read_json()
+    
+    #trigger reading data from database
+    read_database()
+  })
+  
+  
+  #### Database View ####
+  output$printDF <- renderDT({
+    read_database()
+    
+    validate(
+      need(!is.null(db.df()), "No data has been read in.")
+    )
+    
+    data = db.df()
   },
   editable = TRUE, 
   rownames = FALSE, 
@@ -120,25 +466,32 @@ server <- function(input, output, session) {
   
   ##### edit data table #####
   observeEvent(input$printDF_cell_edit, {
-    #TODO fix this with prism change and Z change
     info = input$printDF_cell_edit
-    print(input$printDF_cell_edit)
-    str(info)
     i = info$row
     j = info$col + 1
     
-    newdf = data.df()
+    orig = db.df()
+    orig_row = orig[i,]
+    orig_unit(orig_row$Unit)
+    orig_id(orig_row$ID)
+    orig_suffix(orig_row$Suffix)
+    orig_prism(orig_row$Prism)
+    
+    newdf = db.df()
+    
     newdf[i,j] = info$value
-    data.df(newdf)
+    db.df(newdf)
     plot.df(newdf)
     
-    jdata = jsondata()
-    sp.df = split(newdf %>% select(-ROW), newdf$ROW)
+    newrow = newdf[i, ]
+    if(colnames(newdf[i,])[j] == "Prism") {
+      shot_value = as.numeric(newrow$Z) + orig_prism() #current stored Z + prism height
+      new_Z = shot_value - as.numeric(newrow$Prism)
+      newrow$Z = new_Z
+    }
     
-    dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units", "UNIT"))]
-    jdata[[dataname]] <- sp.df
-    jsondata(jdata)
-    write(toJSON(jdata), jsonfile())
+    print(newrow)
+    write_database_edits(newrow)
   })
   
   ##### download from data table #####
@@ -148,31 +501,46 @@ server <- function(input, output, session) {
       return(paste0(name, "_", Sys.Date(), ".csv"))
     },
     content = function(file) {
-      vroom::vroom_write(data.df(), file, delim = ",")
+      vroom::vroom_write(db.df(), file, delim = ",")
     }
   )
   
   #### Plotting ####
+  ##### color palettes #####
+  assign_random_colors = function(categories) {
+    colors = colors()
+    random_colors = sample(colors, length(categories), replace = F)
+    category_colors = setNames(random_colors, categories)
+    return(category_colors)
+  }
+  
+  unit_palette = reactiveValues(colors = c())
+  code_palette = reactiveValues(colors = c())
+  level_palette = reactiveValues(colors = c())
+  
+  category_palette = reactiveValues(colors = NULL)
+  
   ##### Select input rendering ####
-  observeEvent(data.df(), {
-    data = data.df()
-    updateSelectizeInput(session, "select_units", choices = data$UNIT, server = T, 
+  observeEvent(db.df(), {
+    data = db.df()
+    updateSelectizeInput(session, "select_units", choices = sort(unique(data$Unit)), server = T, 
                          selected = input$select_units)
-    updateSelectizeInput(session, "select_levels", choices = data$LEVEL, server = T, 
+    updateSelectizeInput(session, "select_levels", choices = sort(unique(data$level)), server = T, 
                          selected = input$select_levels)
-    updateSelectizeInput(session, "select_code", choices = data$CODE, server = T, 
+    updateSelectizeInput(session, "select_code", choices = sort(unique(data$code)), server = T, 
                          selected = input$select_code)
   })
+  
   ##### Clear selections ####
   observeEvent(input$clear_plot, {
-    data = data.df()
-    color_palette(NULL)
+    data = db.df()
+    category_palette$colors = NULL
     updateSelectInput(session, "select_view", label = "Select point view", 
                       choices = list("All points" = 1, "Last points" = 2), 
                       selected = 1)
-    updateSelectizeInput(session, "select_units", choices = data$UNIT, server = T, selected = NULL)
-    updateSelectizeInput(session, "select_levels", choices = data$LEVEL, server = T, selected = NULL)
-    updateSelectizeInput(session, "select_code", choices = data$CODE, server = T, selected = NULL)
+    updateSelectizeInput(session, "select_units", choices = sort(unique(data$Unit)), server = T, selected = NULL)
+    updateSelectizeInput(session, "select_levels", choices = sort(unique(data$level)), server = T, selected = NULL)
+    updateSelectizeInput(session, "select_code", choices = sort(unique(data$code)), server = T, selected = NULL)
     updateCheckboxGroupInput(session, "color_select", choices = list("Code" = 1, "Unit" = 2, "Level" = 3), selected = NULL, inline = T)
     updateCheckboxGroupInput(session, "extra_plots", choices = list("Datums" = 1, "Units" = 2, "Multi-points" = 3), selected = NULL, inline = T)
   })
@@ -180,8 +548,8 @@ server <- function(input, output, session) {
   ##### highlight "found" point ####
   special_point <- reactiveValues(data = NULL)
   observeEvent(input$find, {
-    data = data.df()
-    special_point$data = data %>% filter(UNIT == input$find_unit & ID == input$find_id)
+    data = db.df()
+    special_point$data = data %>% filter(Unit == input$find_unit & ID == input$find_id)
   })
   
   observeEvent(input$clear_find, {
@@ -191,20 +559,84 @@ server <- function(input, output, session) {
   })
   
   #####picking palettes #####
-  color_palette = reactiveVal()
   observeEvent(input$color_select, {
-    if(is.null(color_palette())) {
-      showModal(modalDialog(
-        selectInput("palette_select", "Select palette", choices = c(
-          "Set1", "Set2", "Set3", "Dark2", "Accent"
-        )),
-        actionButton("pick_palette", label = "OK")
-      ))
+    data = db.df()
+    categories = c()
+    if(input$color_select == 1) { #code
+      if(!is.null(input$select_code)) {
+        categories = input$select_code
+      } else {
+        categories = sort(unique(data$code))
+      }
+    } else if(input$color_select == 2) { #unit
+      if(!is.null(input$select_units)) {
+        categories = input$select_units
+      } else {
+        categories = sort(unique(data$Unit))
+      }
+    } else { #level
+      if(!is.null(input$select_levels)) {
+        categories = input$select_levels
+      } else {
+        categories = sort(unique(data$level))
+      }
+      categories = sort(unique(data$level))
     }
+    
+    categories = categories[categories != ""]
+    
+    category_palette$colors = assign_random_colors(categories)
+    selected_colors = category_palette$colors
+    
+    half_cat = ceiling(length(categories)/2)
+    
+    showModal(modalDialog(
+      fluidRow(
+        column(6, lapply(categories[1:half_cat], function(cat) {
+          colourInput(inputId = paste0("color_", cat), label = cat, value = selected_colors[cat])
+        })),
+        column(6, lapply(categories[(half_cat + 1):length(categories)], function(cat) {
+          colourInput(inputId = paste0("color_", cat), label = cat, value = selected_colors[cat])
+        }))
+      ),
+      actionButton("pick_palette", label = "OK"), 
+      easyClose = T
+    ))
   })
+  
   observeEvent(input$pick_palette, {
     removeModal()
-    color_palette(input$palette_select)
+    data = db.df()
+    if(input$color_select == 1) { #code
+      if(!is.null(input$select_code)) {
+        categories = input$select_code
+      } else {
+        categories = sort(unique(data$code))
+      }
+    } else if(input$color_select == 2) { #unit
+      if(!is.null(input$select_units)) {
+        categories = input$select_units
+      } else {
+        categories = sort(unique(data$Unit))
+      }
+    } else { #level
+      if(!is.null(input$select_levels)) {
+        categories = input$select_levels
+      } else {
+        categories = sort(unique(data$level))
+      }
+      categories = sort(unique(data$level))
+    }
+    
+    categories = categories[categories != ""]
+    
+    selected_colors = c()
+    for (cat in categories) {
+      selected_colors = c(selected_colors, input[[paste0("color_", cat)]])
+    }
+    category_colors = setNames(selected_colors, categories)
+    
+    category_palette$colors = category_colors
   })
   
   
@@ -212,10 +644,10 @@ server <- function(input, output, session) {
   front_ranges <- reactiveValues(x = NULL, y = NULL)
   side_ranges <- reactiveValues(x = NULL, y = NULL)
   plan_ranges <- reactiveValues(x = NULL, y = NULL)
-  observeEvent(jsonfile(), {
+  observeEvent(db.df(), {
     data = data.frame(X = 0, Y = 0, Z = 0)
-    if(!is.null(data.df())) {
-      data = data.df()
+    if(!is.null(db.df())) {
+      data = db.df()
     }
     front_ranges$x <- c(min(data$X) - 50, max(data$X) + 50)
     front_ranges$y <- c(min(data$Z) - 50, max(data$Z) + 50)
@@ -225,46 +657,53 @@ server <- function(input, output, session) {
     plan_ranges$y <- c(min(data$Y) - 50, max(data$Y) + 50)
   })
   
+  
   #### front plot ####
   front.plot = reactiveVal()
   output$frontView <- renderPlot({
+    read_database()
+    
+    validate(
+      need(!is.null(db.df()), "No data has been read in.")
+    )
+    
     if(input$select_view == 2) {
       data = last.points()
     } else {
-      data = data.df()
+      data = db.df()
     }
-    data = data %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
+    
+    data = data %>% group_by(Unit, ID) %>% mutate(grp = cur_group_id())
+    
+    if(input$select_view == 3) {
+      data = data[duplicated(data$grp) | duplicated(data$grp, fromLast = TRUE), ]
+    }
     
     #####draw front view#####
-    s.units = unique(data$UNIT)
+    s.units = unique(data$Unit)
     if(!is.null(input$select_units)) {
       s.units = input$select_units
     }
     
-    s.levels = unique(data$LEVEL)
+    s.levels = unique(data$level)
     if(!is.null(input$select_levels)) {
       s.levels = input$select_levels
     }
     
-    s.codes = unique(data$CODE)
+    s.codes = unique(data$code)
     if(!is.null(input$select_code)) {
       s.codes = input$select_code
     }
     
     pdata = data %>% 
-      filter(UNIT %in% s.units) %>%
-      filter(LEVEL %in% s.levels) %>%
-      filter(CODE %in% s.codes)
+      filter(Unit %in% s.units) %>%
+      filter(level %in% s.levels) %>%
+      filter(code %in% s.codes)
     plot.df(pdata)
     baseplot = ggplot(pdata, aes(x=X, y=Z)) + 
       geom_point() +
       coord_cartesian(xlim = front_ranges$x, ylim = front_ranges$y, expand = FALSE)
     p = baseplot
-    
-    #need to fix this so only multi-points are showing
-    # if(input$select_view == 2) {
-    #   p = p + geom_line(aes(group = grp))
-    # }
     
     if(!is.null(special_point$data)) {
       p = p + geom_point(data = special_point$data, color = "red", size = 3) 
@@ -272,16 +711,16 @@ server <- function(input, output, session) {
     
     if(!is.null(input$color_select)) {
       if(input$color_select == 1) { #code
-        p = p + geom_point(aes(x = X, y = Z, color = CODE))
+        p = p + geom_point(aes(x = X, y = Z, color = code))
         
       } else if(input$color_select == 2) { #unit
-        p = p + geom_point(aes(x = X, y = Z, color = UNIT))
+        p = p + geom_point(aes(x = X, y = Z, color = Unit))
         
       } else { #level
-        p = p + geom_point(aes(x = X, y = Z, color = LEVEL))
+        p = p + geom_point(aes(x = X, y = Z, color = level))
       }
-      if(!is.null(color_palette())) {
-        p = p + scale_color_brewer(palette = color_palette())
+      if(!is.null(category_palette$colors)) {
+        p = p + scale_color_manual(values = category_palette$colors)
       }
     }
     
@@ -309,7 +748,7 @@ server <- function(input, output, session) {
       front_ranges$y <- c(brush$ymin, brush$ymax)
       
     } else {
-      data = data.df()
+      data = db.df()
       front_ranges$x <- c(min(data$X) - 50, max(data$X) + 50)
       front_ranges$y <- c(min(data$Z) - 50, max(data$Z) + 50)
     }
@@ -318,42 +757,47 @@ server <- function(input, output, session) {
   #### side plot ####
   side.plot = reactiveVal()
   output$sideView <- renderPlot({
+    read_database()
+    
+    validate(
+      need(!is.null(db.df()), "No data has been read in.")
+    )
+    
     if(input$select_view == 2) {
       data = last.points()
     } else {
-      data = data.df()
+      data = db.df()
     }
-    data = data %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
+    data = data %>% group_by(Unit, ID) %>% mutate(grp = cur_group_id())
+    
+    if(input$select_view == 3) {
+      data = data[duplicated(data$grp) | duplicated(data$grp, fromLast = TRUE), ]
+    }
     
     #####draw side view#####
-    s.units = unique(data$UNIT)
+    s.units = unique(data$Unit)
     if(!is.null(input$select_units)) {
       s.units = input$select_units
     }
     
-    s.levels = unique(data$LEVEL)
+    s.levels = unique(data$level)
     if(!is.null(input$select_levels)) {
       s.levels = input$select_levels
     }
     
-    s.codes = unique(data$CODE)
+    s.codes = unique(data$code)
     if(!is.null(input$select_code)) {
       s.codes = input$select_code
     }
     
-    pdata = data %>% filter(UNIT %in% s.units) %>%
-      filter(LEVEL %in% s.levels) %>%
-      filter(CODE %in% s.codes)
+    pdata = data %>% filter(Unit %in% s.units) %>%
+      filter(level %in% s.levels) %>%
+      filter(code %in% s.codes)
     plot.df(pdata)
     baseplot = ggplot(pdata, aes(x = Y, y = Z)) +
       geom_point() +
       coord_cartesian(xlim = side_ranges$x, ylim = side_ranges$y, expand = FALSE)
     p = baseplot
-    
-    
-    # if(input$select_view == 2) {
-    #   p = p + geom_line(aes(group = grp))
-    # }
     
     if(!is.null(special_point$data)) {
       p = p + geom_point(data = special_point$data, color = "red", size = 3) 
@@ -361,14 +805,14 @@ server <- function(input, output, session) {
     
     if(!is.null(input$color_select)) {
       if(input$color_select == 1) { #code
-        p = p + geom_point(aes(x = Y, y = Z, color = CODE))
+        p = p + geom_point(aes(x = Y, y = Z, color = code))
       } else if(input$color_select == 2) { #unit
-        p = p + geom_point(aes(x = Y, y = Z, color = UNIT))
+        p = p + geom_point(aes(x = Y, y = Z, color = Unit))
       } else { #level
-        p = p + geom_point(aes(x = Y, y = Z, color = LEVEL))
+        p = p + geom_point(aes(x = Y, y = Z, color = level))
       }
-      if(!is.null(color_palette())) {
-        p = p + scale_color_brewer(palette = color_palette())
+      if(!is.null(category_palette$colors)) {
+        p = p + scale_color_manual(values = category_palette$colors)
       }
     }
     
@@ -395,7 +839,7 @@ server <- function(input, output, session) {
       side_ranges$y <- c(brush$ymin, brush$ymax)
       
     } else {
-      data = data.df()
+      data = db.df()
       side_ranges$x <- c(min(data$Y) - 50, max(data$Y) + 50)
       side_ranges$y <- c(min(data$Z) - 50, max(data$Z) + 50)
     }
@@ -404,41 +848,47 @@ server <- function(input, output, session) {
   #### plan plot ####
   plan.plot = reactiveVal()
   output$planView <- renderPlot({
+    read_database()
+    
+    validate(
+      need(!is.null(db.df()), "No data has been read in.")
+    )
+    
     if(input$select_view == 2) {
       data = last.points()
     } else {
-      data = data.df()
+      data = db.df()
     }
-    data = data %>% group_by(UNIT, ID) %>% mutate(grp = cur_group_id())
+    data = data %>% group_by(Unit, ID) %>% mutate(grp = cur_group_id())
+    
+    if(input$select_view == 3) {
+      data = data[duplicated(data$grp) | duplicated(data$grp, fromLast = TRUE), ]
+    }
     
     ##### draw plan view #####
-    s.units = unique(data$UNIT)
+    s.units = unique(data$Unit)
     if(!is.null(input$select_units)) {
       s.units = input$select_units
     }
     
-    s.levels = unique(data$LEVEL)
+    s.levels = unique(data$level)
     if(!is.null(input$select_levels)) {
       s.levels = input$select_levels
     }
     
-    s.codes = unique(data$CODE)
+    s.codes = unique(data$code)
     if(!is.null(input$select_code)) {
       s.codes = input$select_code
     }
     
-    pdata = data %>% filter(UNIT %in% s.units) %>%
-      filter(LEVEL %in% s.levels) %>%
-      filter(CODE %in% s.codes)
+    pdata = data %>% filter(Unit %in% s.units) %>%
+      filter(level %in% s.levels) %>%
+      filter(code %in% s.codes)
     plot.df(pdata)
     baseplot = ggplot(pdata) +
       geom_point(aes(x = X, y = Y)) +
       coord_cartesian(xlim = plan_ranges$x, ylim = plan_ranges$y, expand = FALSE)
     p = baseplot
-    
-    # if(input$select_view == 2) {
-    #   p = p + geom_line(aes(group = grp))
-    # }
     
     if(!is.null(special_point$data)) {
       p = p + geom_point(data = special_point$data, aes(x = X, y = Y), color = "red", size = 3) 
@@ -446,14 +896,14 @@ server <- function(input, output, session) {
     
     if(!is.null(input$color_select)) {
       if(input$color_select == 1) { #code
-        p = p + geom_point(aes(x = X, y = Y, color = CODE))
+        p = p + geom_point(aes(x = X, y = Y, color = code))
       } else if(input$color_select == 2) { #unit
-        p = p + geom_point(aes(x = X, y = Y, color = UNIT))
+        p = p + geom_point(aes(x = X, y = Y, color = Unit))
       } else { #level
-        p = p + geom_point(aes(x = X, y = Y, color = LEVEL))
+        p = p + geom_point(aes(x = X, y = Y, color = level))
       }
-      if(!is.null(color_palette())) {
-        p = p + scale_color_brewer(palette = color_palette())
+      if(!is.null(category_palette$colors)) {
+        p = p + scale_color_manual(values = category_palette$colors)
       }
     }
     
@@ -475,7 +925,7 @@ server <- function(input, output, session) {
         
         p = p + geom_rect(data = units,
                           mapping = aes(xmin = MINX, xmax = MAXX, ymin = MINY, ymax = MAXY),
-                          color = "grey40", alpha = 0)
+                          color = "orange", alpha = 0)
       }
       if("3" %in% input$extra_plots){
         p = p + geom_line(aes(x = X, y = Y, group = grp))
@@ -494,7 +944,7 @@ server <- function(input, output, session) {
       plan_ranges$y <- c(brush$ymin, brush$ymax)
       
     } else {
-      data = data.df()
+      data = db.df()
       plan_ranges$x <- c(min(data$X) - 50, max(data$X) + 50)
       plan_ranges$y <- c(min(data$Y) - 50, max(data$Y) + 50)
     }
@@ -502,41 +952,42 @@ server <- function(input, output, session) {
   
   #### data table for clicked point #####
   output$info = renderTable(striped = T, bordered = T, width = "100%", {
+    
+    validate(
+      need(!is.null(plot.df()), "No data has been read in.")
+    )
+    
     data = plot.df()
     
     df = data %>%
-      select(UNIT, ID, X, Y, Z, PRISM, LEVEL, CODE, EXCAVATOR)
+      select(Unit, ID, Suffix, X, Y, Z, Prism, level, code, excavator)
     df = as.data.frame(df)
     
     nearPoints(df, input$plot_click, threshold = 10, maxpoints = 5, addDist = T)
   })
   
   #### Edit point from plot ####
-  orig_row = reactiveVal()
-  orig_unit = reactiveVal()
-  orig_id = reactiveVal()
-  orig_prism = reactiveVal()
   observeEvent(input$edit,  {
     data = plot.df()
     
     df = data %>%
-      select(ROW, UNIT, ID, SUFFIX, X, Y, Z, PRISM, LEVEL, CODE, EXCAVATOR)
+      select(Unit, ID, Suffix, X, Y, Z, Prism, level, code, excavator)
     df = as.data.frame(df)
     
     point = nearPoints(df, input$plot_click, threshold = 10, maxpoints = 1, addDist = F)
-    orig_row(point$ROW)
-    orig_unit(point$UNIT)
+    orig_unit(point$Unit)
     orig_id(point$ID)
-    orig_prism(point$PRISM)
+    orig_suffix(point$Suffix)
+    orig_prism(point$Prism)
     
     showModal(modalDialog(
       title = "Edit",
-      conditionalPanel("false", textInput("row_input", label = "row", value = point$ROW)),
+      #conditionalPanel("false", textInput("row_input", label = "row", value = point$ROW)),
       #textInput("row_input", label = "ROW", value = point$ROW),
       fluidRow(
-        column(4, textInput("unit_input", label = "UNIT", value = point$UNIT)),
+        column(4, textInput("unit_input", label = "UNIT", value = point$Unit)),
         column(4, textInput("id_input", label = "ID", value = point$ID)),
-        column(4, textInput("suffix_input", label = "SUFFIX", value = point$SUFFIX)),
+        column(4, textInput("suffix_input", label = "SUFFIX", value = point$Suffix)),
       ),
       fluidRow(
         column(4, textInput("x_input", label = "X", value = point$X)),
@@ -544,16 +995,16 @@ server <- function(input, output, session) {
         column(4, textInput("z_input", label = "Z", value = point$Z)),
       ),
       fluidRow(
-        column(12, textInput("prism_input", label = "PRISM", value = point$PRISM)), 
+        column(12, textInput("prism_input", label = "PRISM", value = point$Prism)), 
       ), 
       fluidRow(
-        column(12, textInput("level_input", label = "LEVEL", value = point$LEVEL)),
+        column(12, textInput("level_input", label = "LEVEL", value = point$level)),
       ), 
       fluidRow(
-        column(12, textInput("code_input", label = "CODE", value = point$CODE)),
+        column(12, textInput("code_input", label = "CODE", value = point$code)),
       ), 
       fluidRow(
-        column(12, textInput("excav_input", label = "EXCAVATOR", value = point$EXCAVATOR)),
+        column(12, textInput("excav_input", label = "EXCAVATOR", value = point$excavator)),
       ),
       actionButton("submit_edits", label = "Submit changes"),
       easyClose = TRUE,
@@ -564,17 +1015,19 @@ server <- function(input, output, session) {
   
   observeEvent(input$submit_edits, {
     removeModal()
-    orig = data.df()
-    datarow = orig[which(orig$ROW == orig_row())[[1]],]
-    datarow$UNIT = input$unit_input
+    orig = db.df()
+    
+    datarow = orig[which(orig$Unit == orig_unit() & orig$ID == orig_id())[[1]],]
+    
+    datarow$Unit = input$unit_input
     datarow$ID = input$id_input
-    datarow$SUFFIX = as.numeric(input$suffix_input)
+    datarow$Suffix = as.numeric(input$suffix_input)
     datarow$X = as.numeric(input$x_input)
     datarow$Y = as.numeric(input$y_input)
-    datarow$PRISM = as.numeric(input$prism_input)
-    datarow$LEVEL = input$level_input
-    datarow$CODE = input$code_input
-    datarow$EXCAVATOR = input$excav_input
+    datarow$Prism = as.numeric(input$prism_input)
+    datarow$level = input$level_input
+    datarow$code = input$code_input
+    datarow$excavator = input$excav_input
     
     if(input$prism_input != orig_prism()) {
       shot_value = as.numeric(input$z_input) + orig_prism() #current stored Z + prism height
@@ -585,16 +1038,11 @@ server <- function(input, output, session) {
     datarow$Z = new_Z
     
     print(datarow)
-    newdf = data.df()
-    newdf[which(newdf$ROW == orig_row())[[1]],] = datarow
-    data.df(newdf)
+    newdf = db.df()
+    newdf[which(newdf$Unit == orig_unit() & newdf$ID == orig_id())[[1]],] = datarow
+    db.df(newdf)
     
-    jdata = jsondata()
-    sp.df = split(newdf %>% select(-ROW), newdf$ROW)
-    dataname = names(jdata)[!(names(jdata) %in% c("prisms", "datums", "units", "UNIT"))]
-    jdata[[dataname]] <- sp.df
-    jsondata(jdata)
-    write(toJSON(jdata), jsonfile())
+    write_database_edits(datarow)
   })
   
   #### download from plot #####
@@ -607,18 +1055,6 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       data = plot.df()
-      
-      #TODO need to fix this to get all data from the json not just the filtered data
-      
-      # data.from.json = jsondata()
-      # points.json = data.from.json[[dbname()]]
-      # # points = data.frame(matrix(unlist(points.json), 
-      # #                            ncol = length(points.json[[1]]), byrow = TRUE), 
-      # #                     stringsAsFactors = FALSE)
-      # points = as.data.frame(points.json)
-      # print(points)
-      # 
-      # data = points %>% filter(ID %in% data$ID)
       zoomed = data
       
       if(input$plots == "Front view") {

@@ -10,6 +10,7 @@ if(!require(gtools)){install.packages("gtools")}
 if(!require(ggthemes)){install.packages("ggthemes")}
 if(!require(here)){install.packages("here")}
 if(!require(shinyFiles)){install.packages("shinyFiles")}
+if(!require(colourpicker)){install.packages("colourpicker")}
 
 library(shiny)
 library(tidyverse)
@@ -21,6 +22,7 @@ library(shinythemes)
 library(gtools)
 library(ggthemes)
 library(shinyFiles)
+library(colourpicker)
 
 
 theme_set(theme_bw())
@@ -42,16 +44,14 @@ ui <- fluidPage(
   
   #### newplot ####
   navbarPage( "newplot_field", id = "navbar",
-              ##### data table view ####
-              tabPanel("Data table", id = "dt", 
+              ##### field data view ####
+              tabPanel("DATA TRANSFER", id = "transfer_dt", 
                        tabPanel("Table view",
-                                DTOutput("printDF", 
-                                         width = "auto"), 
-                                
-                                column(width = 6, actionButton("data_transfer", class = "btn-block", label = "Transfer data to Postgres")), 
-                                column(width = 6, downloadButton("download", class = "btn-block", label = "Download CSV"))
+                                DTOutput("printDF_json", width = "auto"), 
+                                column(width = 12, actionButton("data_transfer", class = "btn-block", label = "Transfer data")), 
                        )
               ),
+              
               ##### plots view ####
               tabPanel("Plots", 
                        sidebarLayout(position = "right",
@@ -67,7 +67,7 @@ ui <- fluidPage(
                                          wellPanel(
                                            div(style ="font-size: 11px",
                                                selectInput("select_view", label = "Select point view", 
-                                                           choices = list("All points" = 1, "Last points" = 2), 
+                                                           choices = list("All points" = 1, "Last import" = 2, "2-shots" = 3), 
                                                            selected = 1),
                                                selectizeInput("select_units", label = "Select units", 
                                                               choices = NULL, multiple = T), 
@@ -96,9 +96,9 @@ ui <- fluidPage(
                                          wellPanel(
                                            fluidRow(
                                              div(style = "font-size: 11px",
-                                             textInput("find_unit", "UNIT"), 
-                                                    textInput("find_id","ID"))
-                                             ), 
+                                                 textInput("find_unit", "UNIT"), 
+                                                 textInput("find_id","ID"))
+                                           ), 
                                            fluidRow(
                                              tags$style("#find, #clear_find {vertical-align: middle; height: 30px; font-size: 10px;}"),
                                              column(5, actionButton("find", label = "Find record")), 
@@ -153,15 +153,25 @@ ui <- fluidPage(
                        
                        
               ), 
+              ##### database table view ####
+              tabPanel("Database table", id = "dt",
+                       tabPanel("Table view",
+                                DTOutput("printDF", width = "auto"),
+                                # column(width = 6, downloadButton("download", class = "btn-block", label = "Download CSV"))
+                       )
+              ),
               
               navbarMenu("More", 
                          tabPanel("Units", 
+                                  titlePanel(title = "Units"),
                                   dataTableOutput("units")
                          ),
                          tabPanel("Datums", 
+                                  titlePanel(title = "Datums"),
                                   dataTableOutput("datums")
                          ), 
-                         tabPanel("Prisms", 
+                         tabPanel("Poles", 
+                                  titlePanel(title = "Poles"),
                                   dataTableOutput("prisms")
                          ) 
               )
