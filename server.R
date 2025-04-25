@@ -814,7 +814,7 @@ server <- function(input, output, session) {
       }
     }
     
-    ###### plotting datums, units, multi-points ####
+    ###### plotting datums, units, multi-points, labels ####
     if(!is.null(input$extra_plots)) { ##here can only plot datums
       if("1" %in% input$extra_plots) {
         datums = datums.df()
@@ -822,6 +822,9 @@ server <- function(input, output, session) {
       }
       if("3" %in% input$extra_plots){
         p = p + geom_line(aes(group = grp))
+      }
+      if("4" %in% input$extra_plots) {
+        p = p + geom_text_repel(aes(label = paste(Unit, ID, sep = "-")))
       }
       
     }
@@ -906,7 +909,7 @@ server <- function(input, output, session) {
       }
     }
     
-    ###### plotting datums, units, multi-points ####
+    ###### plotting datums, units, multi-points, labels ####
     if(!is.null(input$extra_plots)) { ##here can only plot datums
       if("1" %in% input$extra_plots) {
         datums = datums.df()
@@ -914,6 +917,9 @@ server <- function(input, output, session) {
       }
       if("3" %in% input$extra_plots){
         p = p + geom_line(aes(group = grp))
+      }
+      if("4" %in% input$extra_plots) {
+        p = p + geom_text_repel(aes(label = paste(Unit, ID, sep = "-")))
       }
     }
     
@@ -997,7 +1003,7 @@ server <- function(input, output, session) {
       }
     }
     
-    ###### plotting datums, units, multi-points ####
+    ###### plotting datums, units, multi-points, labels ####
     if(!is.null(input$extra_plots)) {
       if("1" %in% input$extra_plots) {
         datums = datums.df()
@@ -1019,6 +1025,9 @@ server <- function(input, output, session) {
       }
       if("3" %in% input$extra_plots){
         p = p + geom_line(aes(x = X, y = Y, group = grp))
+      }
+      if("4" %in% input$extra_plots) {
+        p = p + geom_text_repel(aes(label = paste(Unit, ID, sep = "-")))
       }
     }
     

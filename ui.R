@@ -83,7 +83,7 @@ ui <- fluidPage(
                                              ),
                                              div(style="display: inline-block; vertical-align:middle; font-size: 11px",
                                                  checkboxGroupInput("extra_plots", label = "Plot:", 
-                                                                    choices = list("Datums" = 1, "Units" = 2, "Multi-points" = 3), 
+                                                                    choices = list("Datums" = 1, "Units" = 2, "Multi-points" = 3, "SQUIDs" = 4), 
                                                                     inline = T)
                                              )
                                            ), 
